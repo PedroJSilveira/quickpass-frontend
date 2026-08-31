@@ -1,5 +1,5 @@
 /* Industry — design-system tokens and component classes. This file is the source of truth for the system's look; retune it here and see readme.md. */
-@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;700&family=Barlow+Condensed:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
 :root {
   --color-bg: #f2f2f3;
@@ -41,9 +41,9 @@
   --color-accent-2-800: #314457;
   --color-accent-2-900: #1f2d3a;
 
-  --font-heading: "Barlow Condensed", system-ui, sans-serif;
-  --font-heading-weight: 600;
-  --font-body: "Barlow", system-ui, sans-serif;
+  --font-heading: "Poppins", system-ui, sans-serif;
+  --font-heading-weight: 700;
+  --font-body: "Poppins", system-ui, sans-serif;
 
   --space-1: 3.4px;
   --space-2: 6.8px;
@@ -105,18 +105,18 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-headi
    ══════════════════════════════════════════════════════════════════════ */
 
 *, *::before, *::after { box-sizing: border-box; }
-body { margin: 0; font-size: 15px; line-height: 1.55; font-weight: 400; }
+body { margin: 0; font-size: 15px; line-height: 1.6; font-weight: 400; }
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  line-height: 1.12; letter-spacing: -0.015em; margin: 0 0 var(--space-2);
+  line-height: 1.18; letter-spacing: -0.01em; margin: 0 0 var(--space-2);
 }
-h1 { font-size: 42px; }
-h2 { font-size: 32px; }
-h3 { font-size: 25px; }
-h4 { font-size: 20px; }
-h5 { font-size: 16px; }
-h6 { font-size: 13px; }
-h6 { letter-spacing: 0.08em; text-transform: uppercase; }
+h1 { font-size: 38px; }
+h2 { font-size: 28px; }
+h3 { font-size: 22px; font-weight: 600; }
+h4 { font-size: 18px; font-weight: 600; }
+h5 { font-size: 15px; font-weight: 600; }
+h6 { font-size: 12px; font-weight: 600; }
+h6 { letter-spacing: 0.06em; text-transform: uppercase; }
 p { margin: 0 0 var(--space-3); }
 a { color: var(--color-accent); text-underline-offset: 3px; }
 img { display: block; max-width: 100%; }
@@ -288,29 +288,44 @@ textarea.input { min-height: 90px; resize: vertical; }
 /* — layout específico da app (shell com barra lateral) — */
 html, body { height: 100%; }
 body { margin: 0; }
-.qp-shell { display: flex; min-height: 100vh; }
+.qp-shell {
+  display: flex; align-items: flex-start; gap: var(--space-4);
+  min-height: 100vh; padding: var(--space-4); background: var(--color-bg); box-sizing: border-box;
+}
 .qp-sidenav {
-  width: 214px; flex: none; border-right: 1px solid var(--color-divider);
+  width: 232px; flex: none; position: sticky; top: var(--space-4);
+  background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   padding: var(--space-4) var(--space-3); display: flex; flex-direction: column; gap: var(--space-4);
+  min-height: calc(100vh - var(--space-4) * 2);
 }
-.qp-sidenav .nav-brand { margin: 0 0 var(--space-2); }
+.qp-sidenav-brand { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2) var(--space-2); }
+.qp-sidenav-brand-mark {
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; flex: none;
+  background: var(--color-accent-900); color: var(--color-bg); border-radius: var(--radius-md);
+}
+.qp-sidenav-brand-name { font-family: var(--font-heading); font-weight: 700; font-size: 17px; }
 .qp-nav-group { display: flex; flex-direction: column; gap: 2px; }
-.qp-nav-group h6 { margin: var(--space-3) 0 var(--space-1); color: var(--color-neutral-600); }
+.qp-nav-group h6 { margin: var(--space-2) var(--space-2) var(--space-1); color: var(--color-neutral-600); }
 .qp-nav-link {
-  display: flex; align-items: center; gap: 8px; padding: 8px 10px; font-size: 14px;
-  color: var(--color-text); text-decoration: none; border-left: 2px solid transparent;
-  border-radius: var(--radius-sm);
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px; font-size: 14px; font-weight: 500;
+  color: var(--color-text); text-decoration: none; border-radius: var(--radius-md);
 }
-.qp-nav-link:hover { background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+.qp-nav-link lucide-icon { flex: none; color: var(--color-neutral-600); }
+.qp-nav-link:hover { background: color-mix(in srgb, var(--color-text) 6%, transparent); }
 .qp-nav-link.active {
-  border-left-color: var(--color-accent); background: var(--color-accent-100); color: var(--color-accent-800);
+  background: var(--color-accent-900); color: var(--color-bg); box-shadow: var(--shadow-sm);
 }
+.qp-nav-link.active lucide-icon { color: var(--color-bg); }
+.qp-nav-link-muted { color: var(--color-neutral-600); font-weight: 400; border-top: 1px solid var(--color-divider); border-radius: 0; padding-top: var(--space-3); }
+.qp-nav-link-muted lucide-icon { color: var(--color-neutral-500); }
 .qp-topbar {
-  display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-6);
-  border-bottom: 1px solid var(--color-divider);
+  display: flex; align-items: center; gap: var(--space-4); padding: var(--space-3) var(--space-4);
+  background: var(--color-surface); border: 1px solid var(--color-divider); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm); margin-bottom: var(--space-4);
 }
 .qp-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-.qp-main { flex: 1; padding: var(--space-6); }
+.qp-main { flex: 1; }
 .qp-container { max-width: 1100px; margin: 0 auto; }
 .qp-screen-kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent-700); margin-bottom: 4px; }
 .qp-screen-title { font-family: var(--font-heading); font-weight: 600; font-size: 20px; margin-bottom: var(--space-4); }
@@ -338,7 +353,15 @@ body { margin: 0; }
   font-size: 13px; cursor: pointer; border: 1px solid var(--color-divider);
 }
 @media (max-width: 720px) {
-  .qp-shell { flex-direction: column; }
-  .qp-sidenav { width: auto; flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--color-divider); }
+  .qp-shell { flex-direction: column; padding: var(--space-3); }
+  .qp-sidenav {
+    width: auto; min-height: 0; position: static; flex-direction: row; align-items: center;
+    overflow-x: auto; gap: var(--space-3);
+  }
+  .qp-sidenav-brand { padding: 0; }
+  .qp-nav-group { flex-direction: row; }
+  .qp-nav-group h6 { display: none; }
+  .qp-nav-link { flex: none; white-space: nowrap; }
+  .qp-nav-link-muted { border-top: none; border-left: 1px solid var(--color-divider); padding-top: 9px; margin-top: 0 !important; }
   .qp-grid-2 { grid-template-columns: 1fr; }
 }
