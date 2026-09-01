@@ -150,8 +150,9 @@ import { PricingService } from '../../core/services/pricing.service';
       .qp-hero-left { padding: var(--space-4) 0 var(--space-8); display: flex; flex-direction: column; gap: var(--space-4); }
       .qp-hero-left h1 { font-size: 46px; font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; max-width: 480px; }
       .qp-hero-form { display: flex; gap: var(--space-2); align-items: flex-end; flex-wrap: wrap; }
+      .qp-hero-form .input { background: var(--color-surface-light); border-radius: var(--radius-xl); }
       .qp-hero-right { min-width: 380px; }
-      .qp-hero-right img { width: 100%; height: 100%; max-height: 420px; object-fit: cover; border-radius: var(--radius-lg); }
+      .qp-hero-right img { width: 100%; height: 100%; max-height: 420px; object-fit: cover; border-radius: var(--radius-xl); }
 
       .qp-landing-stack { display: flex; flex-direction: column; gap: 56px; padding: 56px var(--space-4); }
 
@@ -170,9 +171,9 @@ import { PricingService } from '../../core/services/pricing.service';
         border-radius: 50%; background: var(--color-accent);
       }
 
-      .qp-panel { background: var(--color-surface); border-radius: var(--radius-lg); padding: var(--space-5); }
+      .qp-panel { background: var(--color-surface); border-radius: var(--radius-xl); padding: var(--space-5); }
 
-      .qp-security { background: var(--color-accent-900); border-radius: var(--radius-lg); padding: var(--space-8) var(--space-6); }
+      .qp-security { background: var(--color-accent-900); border-radius: var(--radius-xl); padding: var(--space-8) var(--space-6); }
       .qp-security-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); }
       .qp-security-item {
         color: color-mix(in srgb, var(--color-bg) 90%, transparent); font-size: 14px;

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { LucideAngularModule, Car, Search, ClipboardList, User, LayoutDashboard, CarFront, Inbox, Wallet, ExternalLink } from 'lucide-angular';
 import { AuthService } from '../../core/services/auth.service';
+import { OwnerService } from '../../core/services/owner.service';
 import { Papel } from '../../core/models/domain.models';
 import { SegControlComponent, SegOption } from '../components/seg-control.component';
 
@@ -11,6 +12,8 @@ interface NavItem {
   label: string;
   icon: typeof Car;
   exact?: boolean;
+  badge?: () => number;
+  muted?: boolean;
 }
 
 /**
@@ -41,10 +44,28 @@ interface NavItem {
         </div>
 
         <nav class="qp-nav-group">
-          <h6>{{ auth.papelAtivo() === 'locatario' ? 'Locatário' : 'Proprietário' }}</h6>
-          @for (item of itensNav(); track item.rota) {
+          @for (item of itensNavPrimario(); track item.rota) {
             <a
               class="qp-nav-link"
+              [routerLink]="item.rota"
+              routerLinkActive="active"
+              [routerLinkActiveOptions]="{ exact: !!item.exact }"
+            >
+              <lucide-icon [img]="item.icon" [size]="18" />
+              {{ item.label }}
+              @if (item.badge && item.badge() > 0) {
+                <span class="qp-nav-badge">{{ item.badge() }}</span>
+              }
+            </a>
+          }
+        </nav>
+
+        <nav class="qp-nav-group qp-nav-group-secondary">
+          <h6>Conta</h6>
+          @for (item of itensNavSecundario(); track item.rota) {
+            <a
+              class="qp-nav-link"
+              [class.qp-nav-link-muted]="item.muted"
               [routerLink]="item.rota"
               routerLinkActive="active"
               [routerLinkActiveOptions]="{ exact: !!item.exact }"
@@ -54,11 +75,6 @@ interface NavItem {
             </a>
           }
         </nav>
-
-        <a class="qp-nav-link qp-nav-link-muted" routerLink="/" style="margin-top: auto;">
-          <lucide-icon [img]="ExternalLinkIcon" [size]="18" />
-          Ver site
-        </a>
       </aside>
 
       <div class="qp-content">
@@ -94,31 +110,46 @@ interface NavItem {
 })
 export class AppShellComponent {
   readonly CarIcon = Car;
-  readonly ExternalLinkIcon = ExternalLink;
 
   papelOptions: SegOption<Papel>[] = [
     { label: 'Locatário', value: 'locatario' },
     { label: 'Proprietário', value: 'proprietario' },
   ];
 
-  private readonly navLocatario: NavItem[] = [
+  private readonly navPrimarioLocatario: NavItem[] = [
     { rota: '/buscar', label: 'Buscar carros', icon: Search },
     { rota: '/locacoes', label: 'Minhas locações', icon: ClipboardList },
-    { rota: '/perfil', label: 'Perfil', icon: User },
   ];
 
-  private readonly navProprietario: NavItem[] = [
+  private readonly navPrimarioProprietario: NavItem[] = [
     { rota: '/proprietario', label: 'Painel', icon: LayoutDashboard, exact: true },
     { rota: '/proprietario/veiculos', label: 'Meus veículos', icon: CarFront },
-    { rota: '/proprietario/solicitacoes', label: 'Solicitações', icon: Inbox },
+    {
+      rota: '/proprietario/solicitacoes',
+      label: 'Solicitações',
+      icon: Inbox,
+      badge: () => this.owner.solicitacoesPendentes().length,
+    },
     { rota: '/proprietario/ganhos', label: 'Ganhos', icon: Wallet },
-    { rota: '/perfil', label: 'Perfil', icon: User },
   ];
 
-  constructor(public auth: AuthService, private router: Router) {}
+  private readonly navSecundario: NavItem[] = [
+    { rota: '/perfil', label: 'Perfil', icon: User },
+    { rota: '/', label: 'Ver site', icon: ExternalLink, muted: true },
+  ];
 
-  itensNav(): NavItem[] {
-    return this.auth.papelAtivo() === 'locatario' ? this.navLocatario : this.navProprietario;
+  constructor(
+    public auth: AuthService,
+    private owner: OwnerService,
+    private router: Router,
+  ) {}
+
+  itensNavPrimario(): NavItem[] {
+    return this.auth.papelAtivo() === 'locatario' ? this.navPrimarioLocatario : this.navPrimarioProprietario;
+  }
+
+  itensNavSecundario(): NavItem[] {
+    return this.navSecundario;
   }
 
   iniciais(): string {

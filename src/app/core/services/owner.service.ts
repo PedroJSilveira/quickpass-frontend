@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
 import { Disponibilidade, Solicitacao } from '../models/domain.models';
 import { BookingService } from './booking.service';
 
@@ -28,6 +28,11 @@ export class OwnerService {
   ]);
 
   readonly solicitacoes = this._solicitacoes.asReadonly();
+
+  /** Solicitações aguardando resposta do proprietário. */
+  readonly solicitacoesPendentes = computed(() =>
+    this._solicitacoes().filter((s) => s.status === 'pendente'),
+  );
 
   disponibilidadeDoVeiculo(veiculoId: string): Disponibilidade {
     const existente = this._disponibilidades()[veiculoId];

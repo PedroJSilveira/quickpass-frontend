@@ -86,7 +86,7 @@ export class PainelComponent {
 
   meusVeiculos = computed(() => this.catalog.doProprietario(this.auth.conta().id));
   veiculosAtivos = computed(() => this.meusVeiculos().filter((v) => v.status === 'Aprovado'));
-  pendentes = computed(() => this.owner.solicitacoes().filter((s) => s.status === 'pendente'));
+  pendentes = computed(() => this.owner.solicitacoesPendentes());
   pagos = computed(() => this.payout.repasses().filter((r) => r.status === 'Pago'));
 
   taxaAceite = computed(() => {
