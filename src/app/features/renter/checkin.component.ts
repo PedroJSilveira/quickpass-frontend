@@ -6,6 +6,10 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { BookingService } from '../../core/services/booking.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { FotosVistoria, Vistoria } from '../../core/models/domain.models';
+import { BackButtonComponent } from '../../shared/components/back-button.component';
+import { InputTextModule } from 'primeng/inputtext';
+import { InputNumberModule } from 'primeng/inputnumber';
+import { TextareaModule } from 'primeng/textarea';
 
 const ROTULOS: { chave: keyof FotosVistoria; rotulo: string }[] = [
   { chave: 'frente', rotulo: 'frente' },
@@ -17,10 +21,11 @@ const ROTULOS: { chave: keyof FotosVistoria; rotulo: string }[] = [
 @Component({
   selector: 'qp-checkin',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, BackButtonComponent, InputTextModule, InputNumberModule, TextareaModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (veiculo(); as v) {
+      <qp-back-button />
       <div class="qp-screen-kicker">Vistoria</div>
       <h4 class="qp-screen-title">Check-in — {{ v.titulo }}</h4>
 
@@ -40,17 +45,17 @@ const ROTULOS: { chave: keyof FotosVistoria; rotulo: string }[] = [
       <div class="qp-grid-2" style="margin-bottom: var(--space-4);">
         <div class="field">
           <label>Quilometragem</label>
-          <input class="input" type="number" [ngModel]="vistoria().km" (ngModelChange)="atualizar({ km: $event })" />
+          <p-inputnumber [ngModel]="vistoria().km" (ngModelChange)="atualizar({ km: $event })" [useGrouping]="false" suffix=" km" />
         </div>
         <div class="field">
           <label>Combustível</label>
-          <input class="input" [ngModel]="vistoria().combustivel" (ngModelChange)="atualizar({ combustivel: $event })" />
+          <input pInputText [ngModel]="vistoria().combustivel" (ngModelChange)="atualizar({ combustivel: $event })" />
         </div>
       </div>
 
       <div class="field" style="margin-bottom: var(--space-4);">
         <label>Observações</label>
-        <textarea class="input" rows="3" [ngModel]="vistoria().observacoes" (ngModelChange)="atualizar({ observacoes: $event })"></textarea>
+        <textarea pTextarea rows="3" [ngModel]="vistoria().observacoes" (ngModelChange)="atualizar({ observacoes: $event })"></textarea>
       </div>
 
       <p class="text-muted" style="font-size: 13px;">

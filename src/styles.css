@@ -361,6 +361,11 @@ body { margin: 0; }
 .qp-container { max-width: 1100px; margin: 0 auto; }
 .qp-screen-kicker { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--color-accent-700); margin-bottom: 4px; }
 .qp-screen-title { font-family: var(--font-heading); font-weight: 600; font-size: 20px; margin-bottom: var(--space-4); }
+.qp-back-link {
+  display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 0;
+  margin-bottom: var(--space-3); font-size: 13px; font-weight: 500; color: var(--color-neutral-600); cursor: pointer;
+}
+.qp-back-link:hover { color: var(--color-accent-700); }
 .qp-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .qp-grid-2x2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .qp-grid-2x3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; }
@@ -400,3 +405,46 @@ body { margin: 0; }
   }
   .qp-grid-2 { grid-template-columns: 1fr; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PrimeNG bridge — casa os componentes de formulário do PrimeNG
+   (InputText, InputNumber, DatePicker, Checkbox, Slider, Textarea) com os
+   tokens Industry acima, reaproveitando o grupo de design tokens
+   `--p-form-field-*` que o PrimeNG já usa como base de TODOS esses
+   componentes (confirmado inspecionando a folha de estilo gerada em
+   runtime). `html:root` (em vez de `:root`) só pra ganhar em especificidade
+   do `:root` que o PrimeNG injeta via JS depois deste arquivo.
+   ══════════════════════════════════════════════════════════════════════ */
+html:root {
+  --p-form-field-background: var(--color-surface);
+  --p-form-field-filled-background: var(--color-surface);
+  --p-form-field-filled-hover-background: var(--color-surface);
+  --p-form-field-filled-focus-background: var(--color-surface);
+  --p-form-field-disabled-background: var(--color-neutral-200);
+  --p-form-field-border-color: var(--color-divider);
+  --p-form-field-hover-border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+  --p-form-field-focus-border-color: var(--color-accent);
+  --p-form-field-color: var(--color-text);
+  --p-form-field-disabled-color: var(--color-neutral-500);
+  --p-form-field-placeholder-color: var(--color-neutral-600);
+  --p-form-field-icon-color: var(--color-neutral-600);
+  --p-form-field-padding-x: 10px;
+  --p-form-field-padding-y: 6px;
+  --p-form-field-shadow: none;
+}
+/* Especificidade elevada (prefixo `body`) pelo mesmo motivo do `html:root`
+   acima: essas são propriedades diretas (não variáveis), e o PrimeNG injeta
+   sua própria regra igualmente específica depois deste arquivo — sem o
+   prefixo, a regra dele vence por ordem de inserção. */
+body .p-inputtext,
+body .p-slider,
+body textarea.p-textarea {
+  width: 100%;
+}
+body p-inputnumber, body p-datepicker { display: block; width: 100%; }
+body .p-datepicker-panel {
+  background: var(--color-surface);
+  border-color: var(--color-divider);
+  color: var(--color-text);
+}
+body .p-slider-track { background: var(--color-divider); }

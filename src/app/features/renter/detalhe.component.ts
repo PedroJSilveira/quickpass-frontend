@@ -5,14 +5,16 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { CatalogService } from '../../core/services/catalog.service';
 import { PricingService } from '../../core/services/pricing.service';
 import { TagComponent } from '../../shared/components/tag.component';
+import { BackButtonComponent } from '../../shared/components/back-button.component';
 
 @Component({
   selector: 'qp-detalhe',
   standalone: true,
-  imports: [CommonModule, RouterLink, TagComponent],
+  imports: [CommonModule, RouterLink, TagComponent, BackButtonComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (veiculo(); as v) {
+      <qp-back-button />
       <div class="qp-photo" style="height: 340px; margin-bottom: var(--space-4);" [style.background-image]="'url(' + v.foto + ')'"></div>
 
       <h3 style="margin-bottom: 4px;">{{ v.titulo }}</h3>

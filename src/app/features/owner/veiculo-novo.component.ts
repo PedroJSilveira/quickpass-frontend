@@ -2,21 +2,33 @@ import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/c
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
+import { InputTextModule } from 'primeng/inputtext';
+import { InputNumberModule } from 'primeng/inputnumber';
 import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { OwnerService } from '../../core/services/owner.service';
 import { PricingService } from '../../core/services/pricing.service';
 import { CategoriaVeiculo, Veiculo } from '../../core/models/domain.models';
 import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame.component';
+import { BackButtonComponent } from '../../shared/components/back-button.component';
 
 const CATEGORIAS: CategoriaVeiculo[] = ['Hatch', 'Sedã', 'SUV', 'Híbrido', 'Elétrico'];
 
 @Component({
   selector: 'qp-veiculo-novo',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, BlueprintFrameComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    BlueprintFrameComponent,
+    BackButtonComponent,
+    InputTextModule,
+    InputNumberModule,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
+    <qp-back-button />
     <div class="qp-screen-kicker">Proprietário</div>
     <h4 class="qp-screen-title">Cadastrar veículo</h4>
 
@@ -33,11 +45,11 @@ const CATEGORIAS: CategoriaVeiculo[] = ['Hatch', 'Sedã', 'SUV', 'Híbrido', 'El
     </div>
 
     <div class="qp-grid-2" style="margin-bottom: var(--space-4);">
-      <div class="field"><label>Marca</label><input class="input" [(ngModel)]="marca" name="marca" /></div>
-      <div class="field"><label>Modelo</label><input class="input" [(ngModel)]="modelo" name="modelo" /></div>
-      <div class="field"><label>Ano</label><input class="input" type="number" [(ngModel)]="ano" name="ano" /></div>
-      <div class="field"><label>Placa</label><input class="input" [(ngModel)]="placa" name="placa" placeholder="ABC1D23" /></div>
-      <div class="field"><label>Diária (R$)</label><input class="input" type="number" [(ngModel)]="diaria" name="diaria" /></div>
+      <div class="field"><label>Marca</label><input pInputText [(ngModel)]="marca" name="marca" /></div>
+      <div class="field"><label>Modelo</label><input pInputText [(ngModel)]="modelo" name="modelo" /></div>
+      <div class="field"><label>Ano</label><p-inputnumber [(ngModel)]="ano" name="ano" [useGrouping]="false" /></div>
+      <div class="field"><label>Placa</label><input pInputText [(ngModel)]="placa" name="placa" placeholder="ABC1D23" /></div>
+      <div class="field"><label>Diária (R$)</label><p-inputnumber [(ngModel)]="diaria" name="diaria" mode="currency" currency="BRL" locale="pt-BR" /></div>
     </div>
 
     <div class="qp-row" style="flex-wrap: wrap; margin-bottom: var(--space-4);">

@@ -8,18 +8,21 @@ import { PricingService } from '../../core/services/pricing.service';
 import { BookingService } from '../../core/services/booking.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Protecao } from '../../core/models/domain.models';
+import { InputTextModule } from 'primeng/inputtext';
 import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame.component';
 import { SegControlComponent, SegOption } from '../../shared/components/seg-control.component';
+import { BackButtonComponent } from '../../shared/components/back-button.component';
 
 type MetodoPagamento = 'pix' | 'cartao';
 
 @Component({
   selector: 'qp-pagamento',
   standalone: true,
-  imports: [CommonModule, FormsModule, BlueprintFrameComponent, SegControlComponent],
+  imports: [CommonModule, FormsModule, BlueprintFrameComponent, SegControlComponent, BackButtonComponent, InputTextModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (veiculo(); as v) {
+      <qp-back-button />
       <div class="qp-screen-kicker">Reserva</div>
       <h4 class="qp-screen-title">Pagamento</h4>
 
@@ -29,15 +32,15 @@ type MetodoPagamento = 'pix' | 'cartao';
         <div class="qp-grid-2" style="margin: var(--space-4) 0;">
           <div class="field" style="grid-column: span 2;">
             <label>Número do cartão</label>
-            <input class="input" [(ngModel)]="numero" name="numero" placeholder="0000 0000 0000 0000" />
+            <input pInputText [(ngModel)]="numero" name="numero" placeholder="0000 0000 0000 0000" />
           </div>
           <div class="field">
             <label>Validade</label>
-            <input class="input" [(ngModel)]="validade" name="validade" placeholder="MM/AA" />
+            <input pInputText [(ngModel)]="validade" name="validade" placeholder="MM/AA" />
           </div>
           <div class="field">
             <label>CVV</label>
-            <input class="input" [(ngModel)]="cvv" name="cvv" placeholder="123" />
+            <input pInputText [(ngModel)]="cvv" name="cvv" placeholder="123" />
           </div>
         </div>
       } @else {

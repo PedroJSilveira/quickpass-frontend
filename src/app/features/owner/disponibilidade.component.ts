@@ -6,14 +6,18 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { CatalogService } from '../../core/services/catalog.service';
 import { OwnerService } from '../../core/services/owner.service';
 import { Disponibilidade } from '../../core/models/domain.models';
+import { BackButtonComponent } from '../../shared/components/back-button.component';
+import { InputNumberModule } from 'primeng/inputnumber';
+import { CheckboxModule } from 'primeng/checkbox';
 
 @Component({
   selector: 'qp-disponibilidade',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, BackButtonComponent, InputNumberModule, CheckboxModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (veiculo(); as v) {
+      <qp-back-button />
       <div class="qp-screen-kicker">Veículo</div>
       <h4 class="qp-screen-title">Disponibilidade — {{ v.titulo }}</h4>
 
@@ -37,11 +41,11 @@ import { Disponibilidade } from '../../core/models/domain.models';
 
       <div class="field" style="margin-bottom: var(--space-4); max-width: 220px;">
         <label>Diária do período (R$)</label>
-        <input class="input" type="number" [(ngModel)]="diaria" name="diaria" />
+        <p-inputnumber [(ngModel)]="diaria" name="diaria" mode="currency" currency="BRL" locale="pt-BR" />
       </div>
 
-      <label class="qp-row" style="margin-bottom: var(--space-4); cursor: pointer;">
-        <input type="checkbox" [(ngModel)]="aceiteAutomatico" name="aceite" />
+      <label class="qp-row" style="margin-bottom: var(--space-4); cursor: pointer; gap: var(--space-2);">
+        <p-checkbox [(ngModel)]="aceiteAutomatico" name="aceite" [binary]="true" />
         Aceite automático de reservas
       </label>
 

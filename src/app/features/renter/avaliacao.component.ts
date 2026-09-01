@@ -7,16 +7,19 @@ import { BookingService } from '../../core/services/booking.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { AuthService } from '../../core/services/auth.service';
 import { StarRatingComponent } from '../../shared/components/star-rating.component';
+import { BackButtonComponent } from '../../shared/components/back-button.component';
+import { TextareaModule } from 'primeng/textarea';
 
 const SELOS_SUGERIDOS = ['Carro limpo', 'Como anunciado', 'Entrega pontual', 'Boa comunicação'];
 
 @Component({
   selector: 'qp-avaliacao',
   standalone: true,
-  imports: [CommonModule, FormsModule, StarRatingComponent],
+  imports: [CommonModule, FormsModule, StarRatingComponent, BackButtonComponent, TextareaModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (veiculo(); as v) {
+      <qp-back-button />
       <div class="qp-screen-kicker">Reputação</div>
       <h4 class="qp-screen-title">Avaliar locação — {{ v.titulo }}</h4>
 
@@ -24,7 +27,7 @@ const SELOS_SUGERIDOS = ['Carro limpo', 'Como anunciado', 'Entrega pontual', 'Bo
 
       <div class="field" style="margin: var(--space-4) 0;">
         <label>Comentário</label>
-        <textarea class="input" rows="4" [ngModel]="texto()" (ngModelChange)="texto.set($event)" placeholder="Como foi sua experiência com este carro e proprietário?"></textarea>
+        <textarea pTextarea rows="4" [ngModel]="texto()" (ngModelChange)="texto.set($event)" placeholder="Como foi sua experiência com este carro e proprietário?"></textarea>
       </div>
 
       <div class="qp-row" style="flex-wrap: wrap; margin-bottom: var(--space-4);">

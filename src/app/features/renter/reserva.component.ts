@@ -5,27 +5,31 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { CatalogService } from '../../core/services/catalog.service';
 import { PricingService } from '../../core/services/pricing.service';
+import { DatePickerModule } from 'primeng/datepicker';
 import { Protecao } from '../../core/models/domain.models';
 import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame.component';
+import { BackButtonComponent } from '../../shared/components/back-button.component';
+import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
 
 @Component({
   selector: 'qp-reserva',
   standalone: true,
-  imports: [CommonModule, FormsModule, BlueprintFrameComponent],
+  imports: [CommonModule, FormsModule, BlueprintFrameComponent, BackButtonComponent, DatePickerModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (veiculo(); as v) {
+      <qp-back-button />
       <div class="qp-screen-kicker">Reserva</div>
       <h4 class="qp-screen-title">Período e proteção</h4>
 
       <div class="qp-grid-2" style="margin-bottom: var(--space-4);">
         <div class="field">
           <label>Retirada</label>
-          <input class="input" type="date" [ngModel]="inicio()" (ngModelChange)="inicio.set($event)" name="inicio" />
+          <p-datepicker [ngModel]="inicioDate()" (ngModelChange)="inicio.set(formatIsoDate($event))" dateFormat="dd/mm/yy" name="inicio" />
         </div>
         <div class="field">
           <label>Devolução</label>
-          <input class="input" type="date" [ngModel]="fim()" (ngModelChange)="fim.set($event)" name="fim" />
+          <p-datepicker [ngModel]="fimDate()" (ngModelChange)="fim.set(formatIsoDate($event))" dateFormat="dd/mm/yy" name="fim" />
         </div>
       </div>
 
@@ -96,4 +100,8 @@ export class ReservaComponent {
       queryParams: { inicio: this.inicio(), fim: this.fim(), protecao: this.protecao() },
     });
   }
+
+  inicioDate = computed(() => parseIsoDate(this.inicio()));
+  fimDate = computed(() => parseIsoDate(this.fim()));
+  formatIsoDate = formatIsoDate;
 }

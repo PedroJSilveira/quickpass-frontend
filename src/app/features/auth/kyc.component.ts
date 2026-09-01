@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { TagComponent } from '../../shared/components/tag.component';
 import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame.component';
+import { BackButtonComponent } from '../../shared/components/back-button.component';
 import { Kyc } from '../../core/models/domain.models';
 
 interface ItemKyc {
@@ -15,12 +16,13 @@ interface ItemKyc {
 @Component({
   selector: 'qp-kyc',
   standalone: true,
-  imports: [CommonModule, TagComponent, BlueprintFrameComponent],
+  imports: [CommonModule, TagComponent, BlueprintFrameComponent, BackButtonComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="qp-page">
       <div class="qp-page-inner qp-stack">
         <div>
+          <qp-back-button />
           <div class="qp-screen-kicker">Segurança</div>
           <h4 class="qp-screen-title" style="margin-bottom: 0;">Verificação de identidade</h4>
         </div>
