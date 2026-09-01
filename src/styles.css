@@ -2,12 +2,14 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --color-bg: #f2f2f3;
-  --color-surface: #e9e9ea;
-  --color-surface-light: color-mix(in srgb, #ffffff 88%, var(--color-surface) 12%);
+  /* Fundo neutro tipo Google (branco puro + superfície cinza-clara), no
+     lugar do cinza-azulado anterior — ver README/CLAUDE.md, seção design. */
+  --color-bg: #ffffff;
+  --color-surface: #f8f9fa;
+  --color-surface-light: #f4f7fd;
   --color-text: #1d1f20;
-  --color-accent: #5980a6;
-  --color-accent-2: #728fab;
+  --color-accent: #2f6fed;
+  --color-accent-2: #3d8bff;
   --color-divider: color-mix(in srgb, #1d1f20 16%, transparent);
 
   /* Tonal ramps — generated in OKLCH on one shared lightness scale, so the
@@ -22,25 +24,27 @@
   --color-neutral-800: #424244;
   --color-neutral-900: #2b2b2d;
 
-  --color-accent-100: #eef6ff;
-  --color-accent-200: #d6ebff;
-  --color-accent-300: #b5d9fd;
-  --color-accent-400: #94bce3;
-  --color-accent-500: #749dc4;
-  --color-accent-600: #597ea3;
-  --color-accent-700: #416180;
-  --color-accent-800: #2c455d;
-  --color-accent-900: #1d2d3d;
+  /* Azul "tecnológico" — mais vívido e saturado que o azul acinzentado
+     anterior, pensado para ficar bonito sobre o novo fundo quase branco. */
+  --color-accent-100: #e8f0fe;
+  --color-accent-200: #d2e3fc;
+  --color-accent-300: #aecbfa;
+  --color-accent-400: #7fadf7;
+  --color-accent-500: #4f8af0;
+  --color-accent-600: #2f6fed;
+  --color-accent-700: #1e54c4;
+  --color-accent-800: #163e92;
+  --color-accent-900: #112c63;
 
-  --color-accent-2-100: #eef6ff;
-  --color-accent-2-200: #d6ebff;
-  --color-accent-2-300: #bdd8f2;
-  --color-accent-2-400: #9ebbd8;
-  --color-accent-2-500: #7e9cb8;
-  --color-accent-2-600: #627d98;
-  --color-accent-2-700: #486077;
-  --color-accent-2-800: #314457;
-  --color-accent-2-900: #1f2d3a;
+  --color-accent-2-100: #e9f2ff;
+  --color-accent-2-200: #d3e6ff;
+  --color-accent-2-300: #a9d0ff;
+  --color-accent-2-400: #7cb6ff;
+  --color-accent-2-500: #5c9dff;
+  --color-accent-2-600: #3d8bff;
+  --color-accent-2-700: #2569d1;
+  --color-accent-2-800: #1b4c9c;
+  --color-accent-2-900: #15346b;
 
   --font-heading: "Poppins", system-ui, sans-serif;
   --font-heading-weight: 700;
@@ -128,6 +132,7 @@ figcaption {
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 .text-muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.text-accent { color: var(--color-accent); }
 :focus { outline: none; }
 :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 ::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
@@ -201,6 +206,28 @@ textarea.input { min-height: 90px; resize: vertical; }
   box-shadow: inset 0 0 0 4px var(--color-bg);
 }
 .radio input:focus-visible + .dot { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+input[type='range'] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 16px;
+  background: transparent; cursor: pointer;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 3px; border-radius: var(--radius-sm); background: var(--color-accent-200);
+}
+input[type='range']::-moz-range-track { height: 3px; border-radius: var(--radius-sm); background: var(--color-accent-200); }
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; margin-top: -6.5px;
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--color-bg); border: 2px solid var(--color-accent);
+  box-shadow: var(--shadow-sm);
+}
+input[type='range']::-moz-range-thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--color-bg); border: 2px solid var(--color-accent);
+  box-shadow: var(--shadow-sm);
+}
+input[type='range']:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+input[type='range']:focus-visible::-moz-range-thumb { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .seg {
   display: inline-flex; overflow: hidden;
   border: 1px solid var(--color-divider); border-radius: var(--radius-md);
