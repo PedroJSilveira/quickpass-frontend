@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { EventBusService } from '../../core/analytics/event-bus.service';
 import { Router, RouterLink } from '@angular/router';
 import { InputTextModule } from 'primeng/inputtext';
 import { InputNumberModule } from 'primeng/inputnumber';
@@ -32,10 +33,10 @@ const CATEGORIAS: CategoriaVeiculo[] = ['Hatch', 'Sedã', 'SUV', 'Híbrido', 'El
     <div class="qp-screen-kicker">Proprietário</div>
     <h4 class="qp-screen-title">Cadastrar veículo</h4>
 
-    @if (!auth.conta().kyc.banco) {
+    @if (!auth.contaVerificada()) {
       <div class="card" style="border-color: var(--color-accent); margin-bottom: var(--space-4);">
-        <div class="card-title">Dados bancários pendentes</div>
-        <p class="card-body">Para anunciar um veículo é preciso cadastrar os dados de cobrança primeiro.</p>
+        <div class="card-title">Verificação de identidade pendente</div>
+        <p class="card-body">Para anunciar um veículo é preciso ter o KYC aprovado (documento, CNH, selfie e dados de cobrança).</p>
         <a class="btn btn-secondary" style="align-self: flex-start;" routerLink="/verificacao">Ir para verificação</a>
       </div>
     }
@@ -98,7 +99,7 @@ const CATEGORIAS: CategoriaVeiculo[] = ['Hatch', 'Sedã', 'SUV', 'Híbrido', 'El
       </div>
     </qp-blueprint>
 
-    <button class="btn btn-primary btn-block" [disabled]="!auth.conta().kyc.banco" (click)="enviar()">
+    <button class="btn btn-primary btn-block" [disabled]="!auth.contaVerificada()" (click)="enviar()">
       Enviar para aprovação
     </button>
   `,
@@ -140,6 +141,7 @@ export class VeiculoNovoComponent {
     private owner: OwnerService,
     public pricing: PricingService,
     private router: Router,
+    private bus: EventBusService,
   ) {}
 
   private calendarioInicial(): Record<string, boolean> {
@@ -157,6 +159,7 @@ export class VeiculoNovoComponent {
   }
 
   enviar(): void {
+    if (!this.auth.contaVerificada()) return;
     const id = 'u1-v' + (this.catalog.doProprietario(this.auth.conta().id).length + 1);
     const veiculo: Veiculo = {
       id,
@@ -169,6 +172,7 @@ export class VeiculoNovoComponent {
       categoria: this.categoria(),
       diaria: this.diaria,
       local: 'Centro',
+      enderecoExato: 'A confirmar com o proprietário',
       distanciaKm: 0,
       cambio: 'Manual',
       combustivel: 'Flex',
@@ -190,6 +194,7 @@ export class VeiculoNovoComponent {
       manutencao: [],
     };
     this.catalog.cadastrar(veiculo);
+    this.bus.emitir('veiculo_listado', { user_id: veiculo.proprietarioId, vehicle_id: id, categoria: veiculo.categoria, ano: veiculo.ano });
     this.owner.salvarDisponibilidade({ veiculoId: id, dias: this.diasAtivos(), aceiteAutomatico: false });
     this.router.navigate(['/proprietario/veiculos']);
   }

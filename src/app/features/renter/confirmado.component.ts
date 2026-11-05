@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { AppConfigService } from '../../core/config/app-config.service';
 import { BookingService } from '../../core/services/booking.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { PricingService } from '../../core/services/pricing.service';
@@ -23,8 +24,9 @@ import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame
           @if (veiculo(); as v) {
             <h4>Solicitação enviada ao proprietário</h4>
             <p class="text-muted">
-              {{ v.titulo }} · {{ pricing.formatarPeriodo(r.inicio, r.fim) }}. O proprietário tem até 12h para
-              aceitar. O valor não foi capturado ainda.
+              {{ v.titulo }} · {{ pricing.formatarPeriodo(r.inicio, r.fim) }}. O proprietário tem até
+              {{ prazoHoras }}h para responder. Nada foi cobrado: o pagamento e a pré-autorização da caução
+              acontecem depois da aprovação.
             </p>
           }
 
@@ -57,6 +59,8 @@ export class ConfirmadoComponent {
     const r = this.reserva();
     return r ? this.catalog.porId(r.veiculoId) : undefined;
   });
+
+  prazoHoras = inject(AppConfigService).get('PRAZO_APROVACAO_RESERVA_HORAS');
 
   constructor(private booking: BookingService, private catalog: CatalogService, public pricing: PricingService) {}
 }

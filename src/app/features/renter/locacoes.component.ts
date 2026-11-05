@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
-import { LucideAngularModule, Clock, CheckCircle2, Car, CheckCheck, XCircle, Search } from 'lucide-angular';
+import { LucideAngularModule, Clock, CheckCircle2, Car, CheckCheck, XCircle, Search, AlertTriangle } from 'lucide-angular';
 import { BookingService } from '../../core/services/booking.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { PricingService } from '../../core/services/pricing.service';
+import { DisputeService } from '../../core/services/dispute.service';
 import { AuthService } from '../../core/services/auth.service';
 import { Reserva, StatusReserva } from '../../core/models/domain.models';
 import { TagComponent, TagVariant } from '../../shared/components/tag.component';
@@ -24,36 +25,62 @@ interface CardReserva {
 }
 
 const ROTULOS: Record<StatusReserva, string> = {
-  aguardando: 'Aguardando proprietário',
+  aguardando_kyc: 'Aguardando verificação',
+  solicitada: 'Aguardando proprietário',
+  aprovada: 'Aprovada — falta pagar',
   confirmada: 'Confirmada',
   em_andamento: 'Em andamento',
+  em_disputa: 'Em disputa',
   concluida: 'Concluída',
-  recusada: 'Recusada',
+  rejeitada: 'Recusada',
+  expirada: 'Expirada',
+  cancelada: 'Cancelada',
+  falha_pagamento: 'Pagamento não concluído',
 };
 
 const DETALHES: Record<StatusReserva, string> = {
-  aguardando: 'O proprietário tem 12h para aceitar. Nada foi cobrado ainda.',
-  confirmada: 'Retirada combinada com o proprietário. Faça o check-in no momento da entrega.',
+  aguardando_kyc: 'Conclua a verificação de identidade para seguir. As datas ficam reservadas por tempo limitado.',
+  solicitada: 'Aguardando resposta do proprietário. Nada foi cobrado ainda.',
+  aprovada: 'O proprietário aprovou. Pague a diária e a pré-autorização da caução para confirmar.',
+  confirmada: 'Pagamento confirmado. Faça o check-in com fotos no momento da entrega.',
   em_andamento: 'Check-in feito. Devolva com o mesmo nível de combustível.',
-  concluida: 'Caução liberada. Locação encerrada.',
-  recusada: 'O proprietário recusou. Valor não capturado.',
+  em_disputa: 'O proprietário informou uma avaria. A caução está retida até a decisão; você pode contestar.',
+  concluida: 'Locação encerrada. A caução é liberada após o prazo sem ocorrências.',
+  rejeitada: 'O proprietário recusou. Nada foi cobrado.',
+  expirada: 'O prazo terminou e as datas foram liberadas. Nada foi cobrado.',
+  cancelada: 'Reserva cancelada.',
+  falha_pagamento: 'O pagamento ou a pré-autorização da caução falhou. As datas foram liberadas.',
 };
 
 const ICONES: Record<StatusReserva, typeof Clock> = {
-  aguardando: Clock,
+  aguardando_kyc: Clock,
+  solicitada: Clock,
+  aprovada: CheckCircle2,
   confirmada: CheckCircle2,
   em_andamento: Car,
+  em_disputa: AlertTriangle,
   concluida: CheckCheck,
-  recusada: XCircle,
+  rejeitada: XCircle,
+  expirada: XCircle,
+  cancelada: XCircle,
+  falha_pagamento: XCircle,
 };
 
 /** Faixa + fundo de cada card, e variante da tag — dentro da paleta de 2 tons já usada no app. */
+const TOM_PENDENTE = { variant: 'accent-2' as TagVariant, cor: 'var(--color-accent-2)', fundo: 'var(--color-accent-2-100)' };
+const TOM_ENCERRADA = { variant: 'outline' as TagVariant, cor: 'var(--color-neutral-300)', fundo: 'var(--color-surface)' };
 const STATUS_TOM: Record<StatusReserva, { variant: TagVariant; cor: string; fundo: string }> = {
-  aguardando: { variant: 'accent-2', cor: 'var(--color-accent-2)', fundo: 'var(--color-accent-2-100)' },
+  aguardando_kyc: TOM_PENDENTE,
+  solicitada: TOM_PENDENTE,
+  aprovada: { variant: 'accent', cor: 'var(--color-accent)', fundo: 'var(--color-accent-100)' },
   confirmada: { variant: 'accent', cor: 'var(--color-accent)', fundo: 'var(--color-accent-100)' },
   em_andamento: { variant: 'accent', cor: 'var(--color-accent-600)', fundo: 'var(--color-accent-200)' },
+  em_disputa: TOM_PENDENTE,
   concluida: { variant: 'neutral', cor: 'var(--color-neutral-400)', fundo: 'var(--color-neutral-100)' },
-  recusada: { variant: 'outline', cor: 'var(--color-neutral-300)', fundo: 'var(--color-surface)' },
+  rejeitada: TOM_ENCERRADA,
+  expirada: TOM_ENCERRADA,
+  cancelada: TOM_ENCERRADA,
+  falha_pagamento: TOM_ENCERRADA,
 };
 
 @Component({
@@ -154,6 +181,7 @@ export class LocacoesComponent {
     public pricing: PricingService,
     private auth: AuthService,
     private router: Router,
+    private dispute: DisputeService,
   ) {}
 
   private minhas = computed(() =>
@@ -165,7 +193,16 @@ export class LocacoesComponent {
     let acaoNome: string | null = null;
     let irParaAcao = () => {};
 
-    if (r.status === 'confirmada') {
+    if (r.status === 'aguardando_kyc') {
+      acaoNome = 'Concluir verificação';
+      irParaAcao = () => this.router.navigate(['/verificacao'], { queryParams: { reserva: r.id } });
+    } else if (r.status === 'aprovada') {
+      acaoNome = 'Pagar e confirmar';
+      irParaAcao = () => this.router.navigate(['/locacoes', r.id, 'pagamento']);
+    } else if (r.status === 'em_disputa' && this.dispute.daReserva(r.id)?.status === 'AGUARDANDO_CONTESTACAO') {
+      acaoNome = 'Ver ocorrência e contestar';
+      irParaAcao = () => this.router.navigate(['/locacoes', r.id, 'contestar']);
+    } else if (r.status === 'confirmada') {
       acaoNome = 'Fazer check-in';
       irParaAcao = () => this.router.navigate(['/locacoes', r.id, 'check-in']);
     } else if (r.status === 'em_andamento') {
@@ -196,19 +233,19 @@ export class LocacoesComponent {
     return [
       {
         nome: 'Em andamento',
-        itens: todas.filter((c) => c.reserva.status === 'em_andamento'),
+        itens: todas.filter((c) => ['em_andamento', 'em_disputa'].includes(c.reserva.status)),
         vazioTexto: 'Nenhuma locação em andamento no momento.',
         cta: false,
       },
       {
         nome: 'Próximas',
-        itens: todas.filter((c) => ['aguardando', 'confirmada'].includes(c.reserva.status)),
+        itens: todas.filter((c) => ['aguardando_kyc', 'solicitada', 'aprovada', 'confirmada'].includes(c.reserva.status)),
         vazioTexto: 'Você não tem locações futuras. Que tal buscar um carro?',
         cta: true,
       },
       {
         nome: 'Histórico',
-        itens: todas.filter((c) => ['concluida', 'recusada'].includes(c.reserva.status)),
+        itens: todas.filter((c) => ['concluida', 'rejeitada', 'expirada', 'cancelada', 'falha_pagamento'].includes(c.reserva.status)),
         vazioTexto: 'Seu histórico de locações aparecerá aqui.',
         cta: false,
       },

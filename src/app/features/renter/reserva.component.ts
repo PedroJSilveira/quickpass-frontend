@@ -4,6 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { CatalogService } from '../../core/services/catalog.service';
+import { AppConfigService } from '../../core/config/app-config.service';
+import { AuthService } from '../../core/services/auth.service';
+import { BookingService } from '../../core/services/booking.service';
 import { PricingService } from '../../core/services/pricing.service';
 import { DatePickerModule } from 'primeng/datepicker';
 import { Protecao } from '../../core/models/domain.models';
@@ -66,7 +69,13 @@ import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
         </div>
       </qp-blueprint>
 
-      <button class="btn btn-primary btn-block" (click)="irParaPagamento(v.id)">Ir para pagamento</button>
+      @if (erro()) {
+        <p class="text-muted" style="font-size: 13px; color: var(--color-danger, inherit);">{{ erro() }}</p>
+      }
+      <p class="text-muted" style="font-size: 12px;">
+        Você só paga depois que o proprietário aprovar. Sem verificação de identidade, as datas ficam reservadas por {{ holdKycMin }} minutos.
+      </p>
+      <button class="btn btn-primary btn-block" (click)="solicitar(v.id, v.diaria)">Confirmar reserva</button>
     }
   `,
   styles: [
@@ -83,6 +92,11 @@ export class ReservaComponent {
   private route = inject(ActivatedRoute);
   private id = toSignal(this.route.paramMap, { requireSync: true });
 
+  erro = signal('');
+  holdKycMin = inject(AppConfigService).get('HOLD_KYC_MINUTOS');
+  private booking = inject(BookingService);
+  private auth = inject(AuthService);
+
   veiculo = computed(() => this.catalog.porId(this.id().get('id') ?? ''));
 
   inicio = signal(this.catalog.filtros().inicio);
@@ -95,10 +109,26 @@ export class ReservaComponent {
     return this.pricing.calcular(v.diaria, this.protecao(), this.inicio(), this.fim());
   });
 
-  irParaPagamento(veiculoId: string): void {
-    this.router.navigate(['/carros', veiculoId, 'pagamento'], {
-      queryParams: { inicio: this.inicio(), fim: this.fim(), protecao: this.protecao() },
-    });
+  /** Cria a solicitação (RF12). Sem KYC aprovado → reserva retida e redirecionamento ao KYC (BDD 9.1). */
+  solicitar(veiculoId: string, diaria: number): void {
+    this.erro.set('');
+    try {
+      const r = this.booking.solicitar({
+        veiculoId,
+        locatarioId: this.auth.conta().id,
+        inicio: this.inicio(),
+        fim: this.fim(),
+        protecao: this.protecao(),
+        diaria,
+      });
+      if (r.status === 'aguardando_kyc') {
+        this.router.navigate(['/verificacao'], { queryParams: { reserva: r.id } });
+      } else {
+        this.router.navigate(['/reserva', r.id, 'confirmado']);
+      }
+    } catch (e) {
+      this.erro.set((e as Error).message);
+    }
   }
 
   inicioDate = computed(() => parseIsoDate(this.inicio()));

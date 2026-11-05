@@ -3,25 +3,21 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { AppConfigService } from '../../core/config/app-config.service';
 import { BookingService } from '../../core/services/booking.service';
 import { CatalogService } from '../../core/services/catalog.service';
-import { FotosVistoria, Vistoria } from '../../core/models/domain.models';
+import { AuthService } from '../../core/services/auth.service';
+import { FotoAlterada, VistoriaFotosComponent } from '../../shared/components/vistoria-fotos.component';
+import { Vistoria } from '../../core/models/domain.models';
 import { BackButtonComponent } from '../../shared/components/back-button.component';
 import { InputTextModule } from 'primeng/inputtext';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { TextareaModule } from 'primeng/textarea';
 
-const ROTULOS: { chave: keyof FotosVistoria; rotulo: string }[] = [
-  { chave: 'frente', rotulo: 'frente' },
-  { chave: 'traseira', rotulo: 'traseira' },
-  { chave: 'laterais', rotulo: 'laterais' },
-  { chave: 'painel', rotulo: 'painel / km' },
-];
-
 @Component({
   selector: 'qp-checkin',
   standalone: true,
-  imports: [CommonModule, FormsModule, BackButtonComponent, InputTextModule, InputNumberModule, TextareaModule],
+  imports: [CommonModule, FormsModule, VistoriaFotosComponent, BackButtonComponent, InputTextModule, InputNumberModule, TextareaModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (veiculo(); as v) {
@@ -29,18 +25,7 @@ const ROTULOS: { chave: keyof FotosVistoria; rotulo: string }[] = [
       <div class="qp-screen-kicker">Vistoria</div>
       <h4 class="qp-screen-title">Check-in — {{ v.titulo }}</h4>
 
-      <div class="qp-grid-2x2" style="max-width: 260px; margin-bottom: var(--space-4);">
-        @for (item of rotulos; track item.chave) {
-          <div
-            class="qp-foto-slot"
-            [class.qp-foto-feita]="vistoria().fotos[item.chave]"
-            (click)="alternarFoto(item.chave)"
-          >
-            <span>[ {{ item.rotulo }} ]</span>
-            <small>{{ vistoria().fotos[item.chave] ? 'registrada' : 'toque para capturar' }}</small>
-          </div>
-        }
-      </div>
+      <qp-vistoria-fotos [fotos]="vistoria().fotos" (alterada)="aoAlterarFoto($event)" style="display: block; margin-bottom: var(--space-4);" />
 
       <div class="qp-grid-2" style="margin-bottom: var(--space-4);">
         <div class="field">
@@ -58,54 +43,82 @@ const ROTULOS: { chave: keyof FotosVistoria; rotulo: string }[] = [
         <textarea pTextarea rows="3" [ngModel]="vistoria().observacoes" (ngModelChange)="atualizar({ observacoes: $event })"></textarea>
       </div>
 
+      <div class="qp-stack" style="margin-bottom: var(--space-4);">
+        <label class="qp-row" style="gap: var(--space-2);">
+          <input type="checkbox" [checked]="vistoria().aceiteLocatario" [disabled]="auth.papelAtivo() !== 'locatario'" (change)="atualizar({ aceiteLocatario: $any($event.target).checked })" />
+          Aceite do locatário — confirmo que as fotos refletem o estado do veículo
+        </label>
+        <label class="qp-row" style="gap: var(--space-2);">
+          <input type="checkbox" [checked]="vistoria().aceiteProprietario" [disabled]="auth.papelAtivo() !== 'proprietario'" (change)="atualizar({ aceiteProprietario: $any($event.target).checked })" />
+          Aceite do proprietário — confirmo as fotos e a entrega do veículo
+        </label>
+        <p class="text-muted" style="font-size: 12px; margin: 0;">
+          Cada parte aceita com o próprio papel (use o seletor de papel no topo). O check-in só é concluído com as 7 fotos
+          recebidas e os dois aceites.
+        </p>
+      </div>
+
+      @if (!dentroDaJanela()) {
+        <p class="text-muted" style="font-size: 13px;">Fora da janela de check-in desta reserva.</p>
+      }
+      @if (erro()) {
+        <p class="text-muted" style="font-size: 13px;">{{ erro() }}</p>
+      }
       <p class="text-muted" style="font-size: 13px;">
-        Ao confirmar, o repasse do proprietário é liberado e a caução segue retida até o check-out.
+        Ao confirmar, o repasse fica previsto; ele só é pago após a conclusão e a resolução da caução.
       </p>
 
-      <button class="btn btn-primary btn-block" [disabled]="fotosFeitas() < 4" (click)="confirmar(v.id)">
-        Confirmar check-in ({{ fotosFeitas() }}/4 fotos)
+      <button class="btn btn-primary btn-block" [disabled]="!podeConfirmar()" (click)="confirmar()">
+        Confirmar check-in ({{ fotosFeitas() }}/{{ total }} fotos)
       </button>
     }
   `,
-  styles: [
-    `
-      .qp-foto-slot {
-        aspect-ratio: 1; border: 1px solid var(--color-divider); display: flex; flex-direction: column;
-        align-items: center; justify-content: center; gap: 4px; font-size: 12px; text-align: center; cursor: pointer;
-      }
-      .qp-foto-feita { border-color: var(--color-accent); background: var(--color-accent-100); }
-    `,
-  ],
 })
 export class CheckinComponent {
-  rotulos = ROTULOS;
-
   private booking = inject(BookingService);
   private catalog = inject(CatalogService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
+  private config = inject(AppConfigService);
+  auth = inject(AuthService);
   private paramMap = toSignal(this.route.paramMap, { requireSync: true });
 
+  total = this.config.get('FOTOS_VISTORIA_OBRIGATORIAS');
   reserva = computed(() => this.booking.porId(this.paramMap().get('id') ?? ''));
   veiculo = computed(() => {
     const r = this.reserva();
     return r ? this.catalog.porId(r.veiculoId) : undefined;
   });
 
-  vistoria = signal<Vistoria>(this.booking.vistoriaVazia(this.reserva()?.id ?? '', 'checkin'));
+  private reservaId = computed(() => this.paramMap().get('id') ?? '');
+  /** Rascunho guardado no service: sobrevive à troca de papel para o segundo aceite. */
+  vistoria = computed(() => this.booking.rascunho(this.reservaId(), 'checkin'));
+  erro = signal('');
 
   fotosFeitas = computed(() => this.booking.contarFotos(this.vistoria().fotos));
+  dentroDaJanela = computed(() => {
+    const r = this.reserva();
+    return !!r && this.booking.dentroDaJanelaCheckin(r);
+  });
+  podeConfirmar = computed(() => {
+    const v = this.vistoria();
+    return this.fotosFeitas() >= this.total && v.aceiteLocatario && v.aceiteProprietario && this.dentroDaJanela();
+  });
 
   atualizar(patch: Partial<Vistoria>): void {
-    this.vistoria.update((v) => ({ ...v, ...patch }));
+    this.booking.atualizarRascunho(this.reservaId(), 'checkin', (v) => ({ ...v, ...patch }));
   }
 
-  alternarFoto(chave: keyof FotosVistoria): void {
-    this.vistoria.update((v) => ({ ...v, fotos: { ...v.fotos, [chave]: !v.fotos[chave] } }));
+  aoAlterarFoto(e: FotoAlterada): void {
+    this.booking.atualizarRascunho(this.reservaId(), 'checkin', (v) => ({ ...v, fotos: { ...v.fotos, [e.chave]: { ...v.fotos[e.chave], ...e.patch } } }));
   }
 
-  confirmar(veiculoId: string): void {
-    this.booking.registrarVistoria(this.vistoria());
-    this.router.navigate(['/locacoes']);
+  confirmar(): void {
+    try {
+      this.booking.registrarVistoria(this.vistoria());
+      this.router.navigate(['/locacoes']);
+    } catch (e) {
+      this.erro.set((e as Error).message);
+    }
   }
 }

@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { SavedSearchService } from '../../core/services/saved-search.service';
 import { InputTextModule } from 'primeng/inputtext';
 import { DatePickerModule } from 'primeng/datepicker';
 import { SliderModule } from 'primeng/slider';
@@ -55,6 +56,14 @@ import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
         </div>
       </div>
     </qp-blueprint>
+
+    <div class="qp-row" style="gap: var(--space-2); flex-wrap: wrap; align-items: center;">
+      <label class="qp-row" style="gap: var(--space-2); font-size: 13px;">
+        <input type="checkbox" [checked]="alertas()" (change)="alertas.set($any($event.target).checked)" />
+        Avisar por push quando surgir carro disponível (opcional)
+      </label>
+      <button class="btn btn-secondary" (click)="salvarBusca()">{{ salva() ? 'Busca salva ✓' : 'Salvar esta busca' }}</button>
+    </div>
 
     <div class="qp-row" style="margin: var(--space-4) 0; flex-wrap: wrap;">
       @for (cat of catalog.categorias; track cat) {
@@ -118,7 +127,27 @@ import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
   ],
 })
 export class BuscaComponent {
+  private saved = inject(SavedSearchService);
+  alertas = signal(false);
+  salva = signal(false);
+
   constructor(public catalog: CatalogService, public pricing: PricingService, private router: Router) {}
+
+  /** Salva localização aproximada (bairro/região), período, categoria e preço — nunca coordenadas exatas. */
+  salvarBusca(): void {
+    const f = this.catalog.filtros();
+    this.saved.salvar({
+      regiao: f.local,
+      raioKm: 10,
+      inicio: f.inicio,
+      fim: f.fim,
+      categoria: f.categoria,
+      precoMax: f.precoMax,
+      alertasAtivos: this.alertas(),
+      canalConsentido: this.alertas(),
+    });
+    this.salva.set(true);
+  }
 
   abrir(id: string): void {
     this.router.navigate(['/carros', id]);

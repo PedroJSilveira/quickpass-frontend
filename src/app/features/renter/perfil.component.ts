@@ -1,6 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
+import { ReferralService } from '../../core/services/referral.service';
+import { CanalNotificacao, ConsentService } from '../../core/services/consent.service';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
 import { Papel } from '../../core/models/domain.models';
@@ -57,6 +59,31 @@ interface ItemPerfil {
       </div>
     </div>
 
+    <div class="card" style="margin-bottom: var(--space-4);">
+      <span class="card-kicker">Indique amigos</span>
+      <p class="text-muted" style="font-size: 12px; margin: 4px 0 8px;">
+        A indicação só é contabilizada quando o convidado conclui e paga a primeira locação. Indicar não altera sua pontuação de confiança.
+      </p>
+      @if (link()) {
+        <code style="word-break: break-all;">{{ link() }}</code>
+      } @else {
+        <button class="btn btn-secondary" (click)="gerarLink()">Gerar meu link</button>
+      }
+    </div>
+
+    <div class="card" style="margin-bottom: var(--space-4);">
+      <span class="card-kicker">Notificações e consentimento</span>
+      <p class="text-muted" style="font-size: 12px; margin: 4px 0 8px;">
+        Mensagens de marketing só são enviadas se você autorizar o canal. Avisos transacionais (reserva, caução) continuam ativos.
+      </p>
+      @for (canal of canais; track canal) {
+        <label class="qp-row" style="gap: var(--space-2);">
+          <input type="checkbox" [checked]="consent.consentimentos()[canal].marketing" (change)="consent.definir(canal, 'marketing', $any($event.target).checked)" />
+          Marketing por {{ canal }}
+        </label>
+      }
+    </div>
+
     <div class="qp-stack">
       @for (item of itens; track item.titulo) {
         <button type="button" class="qp-row-between qp-item-nav" (click)="item.ir()">
@@ -76,6 +103,16 @@ interface ItemPerfil {
   ],
 })
 export class PerfilComponent {
+  consent = inject(ConsentService);
+  private referral = inject(ReferralService);
+  link = signal('');
+
+  gerarLink(): void {
+    this.link.set(this.referral.gerarLink(this.auth.conta().id, { cpf: this.auth.conta().cpf || undefined }).url);
+  }
+
+  canais: CanalNotificacao[] = ['push', 'email', 'sms'];
+
   papelOptions: SegOption<Papel>[] = [
     { label: 'Locatário', value: 'locatario' },
     { label: 'Proprietário', value: 'proprietario' },
@@ -109,7 +146,7 @@ export class PerfilComponent {
   );
 
   cancelamentos = computed(
-    () => this.booking.reservas().filter((r) => r.locatarioId === this.auth.conta().id && r.status === 'recusada').length,
+    () => this.booking.reservas().filter((r) => r.locatarioId === this.auth.conta().id && ['cancelada', 'rejeitada'].includes(r.status)).length,
   );
 
   trocarPapel(papel: Papel): void {

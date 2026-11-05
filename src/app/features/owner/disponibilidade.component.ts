@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { CatalogService } from '../../core/services/catalog.service';
 import { OwnerService } from '../../core/services/owner.service';
-import { Disponibilidade } from '../../core/models/domain.models';
+import { AvailabilityTemplate, Disponibilidade } from '../../core/models/domain.models';
 import { BackButtonComponent } from '../../shared/components/back-button.component';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -49,6 +49,50 @@ import { CheckboxModule } from 'primeng/checkbox';
         Aceite automático de reservas
       </label>
 
+      <div class="card" style="margin-bottom: var(--space-4);">
+        <span class="card-kicker">Liberar agenda com um toque</span>
+        <div class="qp-row" style="gap: var(--space-2); margin: var(--space-2) 0;">
+          <select [ngModel]="template().tipo" (ngModelChange)="definirTemplate({ tipo: $event })" name="tplTipo">
+            <option value="proximo_fim_de_semana">Próximo fim de semana</option>
+            <option value="sexta_a_domingo">Sex–dom das próximas N semanas</option>
+          </select>
+          @if (template().tipo === 'sexta_a_domingo') {
+            <p-inputnumber [ngModel]="template().semanas" (ngModelChange)="definirTemplate({ semanas: $event })" [min]="1" [max]="8" [useGrouping]="false" name="tplSemanas" suffix=" sem." />
+          }
+          <button class="btn btn-ghost" (click)="salvarTemplate()">Salvar template</button>
+        </div>
+        @if (previa(v.id); as p) {
+          @if (p.motivos.length) {
+            <p class="text-muted" style="font-size: 13px;">Não é possível publicar: {{ p.motivos.join(' ') }}</p>
+          } @else {
+            <p class="text-muted" style="font-size: 13px;">Serão liberados {{ p.dias.length }} dia(s): {{ p.dias.join(', ') }}</p>
+          }
+          <button class="btn btn-secondary" [disabled]="p.motivos.length > 0" (click)="liberar(v.id)">Confirmar e liberar</button>
+        }
+        @if (resultado(); as r) {
+          <p style="margin: var(--space-2) 0 0;">
+            Liberado. Solicitações recebidas: {{ r.recompensa.solicitacoesRecebidas }} ·
+            Buscas compatíveis (7 dias): {{ r.recompensa.buscasCompativeis ?? 'dados insuficientes' }}.
+          </p>
+          <button class="btn btn-ghost" (click)="desfazer(v.id)">Desfazer</button>
+        }
+        @if (sugestoes().length) {
+          <p class="text-muted" style="font-size: 12px;">Sugestão pelo seu histórico: {{ sugestoes().join(', ') }}</p>
+        }
+      </div>
+
+      <div class="card" style="margin-bottom: var(--space-4);">
+        <span class="card-kicker">Preferências do anúncio</span>
+        <div class="qp-grid-2" style="margin-top: var(--space-2);">
+          <div class="field"><label>Antecedência mínima (horas)</label><p-inputnumber [(ngModel)]="antecedencia" name="antec" [min]="0" [useGrouping]="false" /></div>
+          <div class="field"><label>Duração mínima (diárias)</label><p-inputnumber [(ngModel)]="duracao" name="dur" [min]="1" [useGrouping]="false" /></div>
+        </div>
+        <p class="text-muted" style="font-size: 12px; margin: 4px 0 0;">Aplicadas automaticamente às próximas reservas. O aceite automático vale para locatários bem avaliados.</p>
+      </div>
+
+      @if (erro()) {
+        <p class="text-muted" style="font-size: 13px;">{{ erro() }}</p>
+      }
       <button class="btn btn-primary" (click)="salvar(v.id)">Salvar disponibilidade</button>
     }
   `,
@@ -75,12 +119,17 @@ export class DisponibilidadeComponent {
   );
 
   constructor(private catalog: CatalogService, private owner: OwnerService, private router: Router) {
+    const t = this.owner.template();
+    if (t) this.template.set(t);
     const v = this.veiculo();
     if (v) {
       const d = this.owner.disponibilidadeDoVeiculo(v.id);
       this.disponibilidade.set(d);
       this.diaria = v.diaria;
       this.aceiteAutomatico = d.aceiteAutomatico;
+      const pref = this.owner.preferencias(v.id);
+      this.antecedencia = pref.antecedenciaMinimaHoras;
+      this.duracao = pref.duracaoMinimaDias;
     }
   }
 
@@ -88,12 +137,60 @@ export class DisponibilidadeComponent {
     this.disponibilidade.update((d) => ({ ...d, dias: { ...d.dias, [iso]: !d.dias[iso] } }));
   }
 
+  erro = signal('');
+  template = signal<AvailabilityTemplate>({ tipo: 'proximo_fim_de_semana', semanas: 2 });
+  resultado = signal<ReturnType<OwnerService['liberarComUmToque']> | null>(null);
+  antecedencia = 0;
+  duracao = 1;
+  sugestoes = computed(() => (this.veiculo() ? this.owner.sugerirDatas(this.veiculo()!.id) : []));
+
+  definirTemplate(patch: Partial<AvailabilityTemplate>): void {
+    this.template.update((t) => ({ ...t, ...patch }));
+  }
+
+  salvarTemplate(): void {
+    this.owner.salvarTemplate(this.template());
+  }
+
+  previa(id: string) {
+    this.owner.template() ?? this.owner.salvarTemplate(this.template());
+    return this.owner.previaUmToque(id);
+  }
+
+  liberar(id: string): void {
+    this.erro.set('');
+    try {
+      this.resultado.set(this.owner.liberarComUmToque(id));
+      this.disponibilidade.set(this.owner.disponibilidadeDoVeiculo(id));
+    } catch (e) {
+      this.erro.set((e as Error).message);
+    }
+  }
+
+  desfazer(id: string): void {
+    this.erro.set('');
+    try {
+      this.owner.desfazer(id);
+      this.resultado.set(null);
+      this.disponibilidade.set(this.owner.disponibilidadeDoVeiculo(id));
+    } catch (e) {
+      this.erro.set((e as Error).message);
+    }
+  }
+
   salvar(veiculoId: string): void {
-    this.owner.salvarDisponibilidade({
-      ...this.disponibilidade(),
-      veiculoId,
-      aceiteAutomatico: this.aceiteAutomatico,
-    });
+    this.owner.salvarPreferencias(veiculoId, { antecedenciaMinimaHoras: this.antecedencia, duracaoMinimaDias: this.duracao });
+    try {
+      this.owner.salvarDisponibilidade({
+        ...this.disponibilidade(),
+        veiculoId,
+        aceiteAutomatico: this.aceiteAutomatico,
+      });
+    } catch (e) {
+      // Ex.: KYC não aprovado — publicar agenda exige verificação (RF02).
+      this.erro.set((e as Error).message);
+      return;
+    }
     this.catalog.atualizar(veiculoId, { diaria: this.diaria });
     this.router.navigate(['/proprietario/veiculos']);
   }

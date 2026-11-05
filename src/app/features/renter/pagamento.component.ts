@@ -6,8 +6,6 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { CatalogService } from '../../core/services/catalog.service';
 import { PricingService } from '../../core/services/pricing.service';
 import { BookingService } from '../../core/services/booking.service';
-import { AuthService } from '../../core/services/auth.service';
-import { Protecao } from '../../core/models/domain.models';
 import { InputTextModule } from 'primeng/inputtext';
 import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame.component';
 import { SegControlComponent, SegOption } from '../../shared/components/seg-control.component';
@@ -58,24 +56,31 @@ type MetodoPagamento = 'pix' | 'cartao';
             <span>Total</span><span>{{ pricing.money(valores().total) }}</span>
           </div>
           <p class="text-muted" style="font-size: 11px; margin: 0;">
-            O valor fica autorizado até o proprietário aceitar; o repasse é liberado somente após o check-in.
+            A caução de {{ pricing.money(valores().caucao) }} é só pré-autorizada no cartão (não é cobrada) e liberada
+            automaticamente após a devolução sem ocorrências. O repasse ao proprietário só ocorre após a conclusão.
           </p>
         </div>
       </qp-blueprint>
 
-      <button class="btn btn-primary btn-block" (click)="pagar(v.id, v.diaria)">Pagar {{ pricing.money(valores().total) }}</button>
+      @if (erro()) {
+        <p class="text-muted" style="font-size: 13px;">{{ erro() }}</p>
+      }
+      <button class="btn btn-primary btn-block" [disabled]="processando() || reserva()?.status !== 'aprovada'" (click)="pagar()">
+        {{ processando() ? 'Processando…' : 'Pagar ' + pricing.money(valores().total) }}
+      </button>
     }
   `,
 })
 export class PagamentoComponent {
   private route = inject(ActivatedRoute);
   private paramMap = toSignal(this.route.paramMap, { requireSync: true });
-  private queryMap = toSignal(this.route.queryParamMap, { requireSync: true });
 
-  veiculo = computed(() => this.catalog.porId(this.paramMap().get('id') ?? ''));
-  inicio = computed(() => this.queryMap().get('inicio') ?? this.catalog.filtros().inicio);
-  fim = computed(() => this.queryMap().get('fim') ?? this.catalog.filtros().fim);
-  protecao = computed<Protecao>(() => (this.queryMap().get('protecao') as Protecao) ?? 'completa');
+  /** A rota recebe o id da RESERVA aprovada (pagamento só existe após a aprovação — RF12). */
+  reserva = computed(() => this.booking.porId(this.paramMap().get('id') ?? ''));
+  veiculo = computed(() => {
+    const r = this.reserva();
+    return r ? this.catalog.porId(r.veiculoId) : undefined;
+  });
 
   metodo = signal<MetodoPagamento>('pix');
   metodoOptions: SegOption<MetodoPagamento>[] = [
@@ -85,30 +90,34 @@ export class PagamentoComponent {
   numero = '';
   validade = '';
   cvv = '';
+  erro = signal('');
+  processando = signal(false);
 
-  valores = computed(() => {
-    const v = this.veiculo();
-    if (!v) return this.pricing.calcular(0, 'completa', this.inicio(), this.fim());
-    return this.pricing.calcular(v.diaria, this.protecao(), this.inicio(), this.fim());
-  });
+  valores = computed(() => this.reserva()?.valores ?? this.pricing.calcular(0, 'completa', '', ''));
 
   constructor(
     public catalog: CatalogService,
     public pricing: PricingService,
     private booking: BookingService,
-    private auth: AuthService,
     private router: Router,
   ) {}
 
-  pagar(veiculoId: string, diaria: number): void {
-    const reserva = this.booking.criar({
-      veiculoId,
-      locatarioId: this.auth.conta().id,
-      inicio: this.inicio(),
-      fim: this.fim(),
-      protecao: this.protecao(),
-      diaria,
-    });
-    this.router.navigate(['/reserva', reserva.id, 'confirmado']);
+  async pagar(): Promise<void> {
+    const r = this.reserva();
+    if (!r) return;
+    this.erro.set('');
+    this.processando.set(true);
+    try {
+      const resultado = await this.booking.pagar(r.id);
+      if (resultado.status === 'confirmada') {
+        this.router.navigate(['/locacoes']);
+      } else {
+        this.erro.set('Pagamento não concluído (diária ou caução recusada). As datas foram liberadas.');
+      }
+    } catch (e) {
+      this.erro.set((e as Error).message);
+    } finally {
+      this.processando.set(false);
+    }
   }
 }

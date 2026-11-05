@@ -5,6 +5,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { BookingService } from '../../core/services/booking.service';
 import { CatalogService } from '../../core/services/catalog.service';
+import { AppConfigService } from '../../core/config/app-config.service';
+import { ReviewService } from '../../core/services/review.service';
 import { AuthService } from '../../core/services/auth.service';
 import { StarRatingComponent } from '../../shared/components/star-rating.component';
 import { BackButtonComponent } from '../../shared/components/back-button.component';
@@ -44,6 +46,10 @@ const SELOS_SUGERIDOS = ['Carro limpo', 'Como anunciado', 'Entrega pontual', 'Bo
         }
       </div>
 
+      <p class="text-muted" style="font-size: 12px;">
+        A avaliação é opcional e só fica visível quando as duas partes avaliarem ou após {{ prazoHoras }}h.
+        Quem não avalia não é penalizado.
+      </p>
       <button class="btn btn-primary btn-block" [disabled]="nota() === 0" (click)="enviar(v.proprietarioId)">
         Enviar avaliação
       </button>
@@ -62,6 +68,7 @@ export class AvaliacaoComponent {
     return r ? this.catalog.porId(r.veiculoId) : undefined;
   });
 
+  prazoHoras = inject(AppConfigService).get('PRAZO_AVALIACAO_HORAS');
   nota = signal(0);
   texto = signal('');
   selosEscolhidos = signal<string[]>([]);
@@ -71,6 +78,7 @@ export class AvaliacaoComponent {
     private catalog: CatalogService,
     private auth: AuthService,
     private router: Router,
+    private reviews: ReviewService,
   ) {}
 
   alternarSelo(selo: string): void {
@@ -83,10 +91,11 @@ export class AvaliacaoComponent {
     const r = this.reserva();
     const nota = this.nota();
     if (!r || nota === 0) return;
-    this.booking.avaliar({
+    this.reviews.enviar({
       reservaId: r.id,
       autorId: this.auth.conta().id,
-      alvoId: proprietarioId,
+      autorPapel: this.auth.papelAtivo(),
+      alvoId: this.auth.papelAtivo() === 'locatario' ? proprietarioId : r.locatarioId,
       nota: nota as 1 | 2 | 3 | 4 | 5,
       texto: this.texto(),
       selos: this.selosEscolhidos(),

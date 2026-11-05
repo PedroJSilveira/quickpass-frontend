@@ -41,11 +41,10 @@ export const routes: Routes = [
       },
       {
         path: 'carros/:id/reservar',
-        canActivate: [kycGuard],
         loadComponent: () => import('./features/renter/reserva.component').then((m) => m.ReservaComponent),
       },
       {
-        path: 'carros/:id/pagamento',
+        path: 'locacoes/:id/pagamento',
         canActivate: [kycGuard],
         loadComponent: () => import('./features/renter/pagamento.component').then((m) => m.PagamentoComponent),
       },
@@ -64,6 +63,10 @@ export const routes: Routes = [
       {
         path: 'locacoes/:id/avaliar',
         loadComponent: () => import('./features/renter/avaliacao.component').then((m) => m.AvaliacaoComponent),
+      },
+      {
+        path: 'locacoes/:id/contestar',
+        loadComponent: () => import('./features/renter/contestacao.component').then((m) => m.ContestacaoComponent),
       },
       {
         path: 'perfil',
@@ -92,6 +95,26 @@ export const routes: Routes = [
         path: 'proprietario/solicitacoes',
         loadComponent: () =>
           import('./features/owner/solicitacoes.component').then((m) => m.SolicitacoesComponent),
+      },
+      {
+        path: 'buscas-salvas',
+        loadComponent: () => import('./features/renter/buscas-salvas.component').then((m) => m.BuscasSalvasComponent),
+      },
+      {
+        path: 'notificacoes',
+        loadComponent: () => import('./features/renter/notificacoes.component').then((m) => m.NotificacoesComponent),
+      },
+      {
+        path: 'proprietario/veiculos/:id/simulacao',
+        loadComponent: () => import('./features/owner/simulacao.component').then((m) => m.SimulacaoComponent),
+      },
+      {
+        path: 'admin/metricas',
+        loadComponent: () => import('./features/admin/metricas.component').then((m) => m.MetricasComponent),
+      },
+      {
+        path: 'admin/disputas',
+        loadComponent: () => import('./features/admin/disputas.component').then((m) => m.DisputasComponent),
       },
       {
         path: 'proprietario/ganhos',

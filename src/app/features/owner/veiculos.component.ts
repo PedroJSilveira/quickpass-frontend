@@ -27,6 +27,7 @@ import { TagComponent } from '../../shared/components/tag.component';
             <span class="card-meta">{{ pricing.moneyRounded(v.diaria) }}/dia · {{ v.placa }} · {{ v.locacoes }} locações</span>
             <div class="qp-row">
               <a class="btn btn-secondary" [routerLink]="['/proprietario/veiculos', v.id, 'disponibilidade']">Disponibilidade</a>
+              <a class="btn btn-ghost" [routerLink]="['/proprietario/veiculos', v.id, 'simulacao']">Simulação de receita</a>
               <a class="btn btn-ghost" [routerLink]="['/proprietario/veiculos/novo']" [queryParams]="{ editar: v.id }">Editar anúncio</a>
             </div>
           </div>

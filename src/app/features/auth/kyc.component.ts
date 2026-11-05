@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { BookingService } from '../../core/services/booking.service';
 import { TagComponent } from '../../shared/components/tag.component';
 import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame.component';
 import { BackButtonComponent } from '../../shared/components/back-button.component';
@@ -49,7 +50,7 @@ interface ItemKyc {
         <div class="qp-stack" style="margin-top: var(--space-2);">
           <div class="qp-row-between" style="font-size: 13px;">
             <span>Status da conta</span>
-            <span class="text-muted">{{ auth.itensKycConcluidos() }} de 4 itens verificados</span>
+            <span class="text-muted">{{ rotuloStatus() }} · {{ auth.itensKycConcluidos() }} de 4 itens enviados</span>
           </div>
           <div style="height: 4px; background: var(--color-divider);">
             <div
@@ -57,8 +58,13 @@ interface ItemKyc {
               [style.width.%]="progresso()"
             ></div>
           </div>
+          @if (erro()) {
+            <p class="text-muted" style="font-size: 13px; margin: 0;">{{ erro() }}</p>
+          }
           @if (auth.contaVerificada()) {
-            <button class="btn btn-primary btn-block" (click)="continuar()">Ir para a busca</button>
+            <button class="btn btn-primary btn-block" (click)="continuar()">
+              {{ reservaId ? 'Continuar minha reserva' : 'Ir para a busca' }}
+            </button>
           }
         </div>
       </div>
@@ -81,13 +87,37 @@ export class KycComponent {
 
   progresso = computed(() => (this.auth.itensKycConcluidos() / 4) * 100);
 
-  constructor(public auth: AuthService, private router: Router) {}
+  /** Reserva retida aguardando o KYC (hold de agenda), quando veio do checkout. */
+  reservaId = inject(ActivatedRoute).snapshot.queryParamMap.get('reserva');
+  erro = signal('');
+
+  rotuloStatus = computed(
+    () =>
+      ({
+        PENDENTE: 'Pendente',
+        EM_ANALISE: 'Em análise',
+        APROVADO: 'Aprovado',
+        REPROVADO: 'Reprovado',
+        EXPIRADO: 'Expirado (renove a CNH)',
+      })[this.auth.statusKyc()],
+  );
+
+  constructor(public auth: AuthService, private router: Router, private booking: BookingService) {}
 
   enviar(item: keyof Kyc): void {
     this.auth.enviarItemKyc(item);
   }
 
   continuar(): void {
+    if (this.reservaId) {
+      try {
+        this.booking.continuarAposKyc(this.reservaId);
+        this.router.navigate(['/reserva', this.reservaId, 'confirmado']);
+      } catch (e) {
+        this.erro.set((e as Error).message);
+      }
+      return;
+    }
     this.router.navigate(['/buscar']);
   }
 }

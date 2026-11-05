@@ -335,7 +335,7 @@ export class SiteComponent {
   }
 
   buscar(): void {
-    this.catalog.atualizarFiltros({ local: this.local(), inicio: this.inicio(), fim: this.fim() });
+    this.catalog.buscar({ local: this.local(), inicio: this.inicio(), fim: this.fim() });
     this.router.navigate(['/buscar']);
   }
 

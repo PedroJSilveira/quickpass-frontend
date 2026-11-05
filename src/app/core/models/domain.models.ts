@@ -1,5 +1,31 @@
 export type Papel = 'locatario' | 'proprietario';
 
+/** Papéis que podem aparecer em eventos analíticos (inclui não autenticado e mediador). */
+export type PapelEvento = Papel | 'visitante' | 'admin';
+
+/** Status do KYC (RF02). */
+export type StatusKyc = 'PENDENTE' | 'EM_ANALISE' | 'APROVADO' | 'REPROVADO' | 'EXPIRADO';
+
+export type CanalOrigem =
+  | 'hiperlocal'
+  | 'busca_organica'
+  | 'referral'
+  | 'midia_paga'
+  | 'direto'
+  | 'desconhecido';
+
+/** Atribuição first-touch gravada no cadastro e imutável (RF08). */
+export interface AcquisitionAttribution {
+  readonly canal: CanalOrigem;
+  readonly utm_source: string | null;
+  readonly utm_medium: string | null;
+  readonly utm_campaign: string | null;
+  readonly utm_term: string | null;
+  readonly utm_content: string | null;
+  readonly referral_code: string | null;
+  readonly capturadaEm: string;
+}
+
 export interface Kyc {
   doc: boolean;
   cnh: boolean;
@@ -18,6 +44,10 @@ export interface Conta {
   nota: number;
   cnhAnos: number;
   membroDesde: string;
+  /** Validade da CNH (ISO). O KYC expira junto (RF02). */
+  validadeCnh: string;
+  /** Origem de aquisição, first-touch e imutável (RF08). */
+  origem: AcquisitionAttribution | null;
 }
 
 export type CategoriaVeiculo = 'Hatch' | 'Sedã' | 'SUV' | 'Híbrido' | 'Elétrico';
@@ -40,7 +70,10 @@ export interface Veiculo {
   placa: string;
   categoria: CategoriaVeiculo;
   diaria: number;
+  /** Localização APROXIMADA (bairro) — única exibida em busca/público (RNF02). */
   local: string;
+  /** Endereço exato: só revelado após KYC aprovado e pagamento confirmado (RNF02). */
+  enderecoExato: string;
   distanciaKm: number;
   cambio: Cambio;
   combustivel: Combustivel;
@@ -55,6 +88,8 @@ export interface Veiculo {
   nota: number | null;
   locacoes: number;
   manutencao: ItemManutencao[];
+  /** Validade de documentação/seguro (ISO). Vencido bloqueia publicar agenda (RF11). */
+  docValidoAte?: string;
 }
 
 export interface Disponibilidade {
@@ -63,12 +98,22 @@ export interface Disponibilidade {
   aceiteAutomatico: boolean;
 }
 
+/**
+ * Estados da reserva (QUICKPASS_REQUISITOS.md §4.2). Transições válidas ficam
+ * em `TRANSICOES_RESERVA` (booking.service).
+ */
 export type StatusReserva =
-  | 'aguardando'
+  | 'aguardando_kyc'
+  | 'solicitada'
+  | 'aprovada'
   | 'confirmada'
   | 'em_andamento'
+  | 'em_disputa'
   | 'concluida'
-  | 'recusada';
+  | 'rejeitada'
+  | 'expirada'
+  | 'cancelada'
+  | 'falha_pagamento';
 
 export type Protecao = 'basica' | 'completa';
 
@@ -91,16 +136,47 @@ export interface Reserva {
   fim: string; // ISO date
   protecao: Protecao;
   status: StatusReserva;
-  valores: Valores; // congelado no momento do pagamento
+  valores: Valores; // congelado no momento da solicitação
   avaliada: boolean;
+  /** Momento em que a reserva foi concluída (semana ISO da North Star). */
+  concluidaEm?: string | null;
+  /** Finalidade declarada pelo locatário (exibida ao proprietário). */
+  finalidade?: string;
+  /** Origem da solicitação (ex.: 'busca', 'radar'). */
+  origem: string;
+  criadaEm: string;
+  /** Hold na agenda: vale enquanto status ∈ {aguardando_kyc, solicitada, aprovada}. */
+  holdExpiraEm: string | null;
+  /** Prazo para o proprietário responder (RF12). */
+  aprovacaoExpiraEm: string | null;
+  /** Janela de caução/disputa começa no check-out. */
+  checkoutEm: string | null;
 }
 
-export interface FotosVistoria {
-  frente: boolean;
-  traseira: boolean;
-  laterais: boolean;
-  painel: boolean;
+/** As 7 fotos obrigatórias de cada vistoria (RF03). */
+export type FotoChave =
+  | 'frente'
+  | 'traseira'
+  | 'lateral_esquerda'
+  | 'lateral_direita'
+  | 'painel'
+  | 'estofamento'
+  | 'combustivel';
+
+export type StatusUpload = 'pendente' | 'na_fila' | 'enviando' | 'enviada' | 'falhou';
+
+export interface FotoVistoria {
+  status: StatusUpload;
+  /** 0..100 */
+  progresso: number;
+  tentativas: number;
+  /** Momento da captura (ISO). */
+  tiradaEm: string | null;
+  /** Localização aproximada opcional (bairro) — nunca lat/long (RNF02). */
+  localAproximada: string | null;
 }
+
+export type FotosVistoria = Record<FotoChave, FotoVistoria>;
 
 export interface Vistoria {
   reservaId: string;
@@ -110,9 +186,11 @@ export interface Vistoria {
   combustivel: string;
   observacoes: string;
   criadaEm: string;
+  aceiteLocatario: boolean;
+  aceiteProprietario: boolean;
 }
 
-export type StatusSolicitacao = 'pendente' | 'aceita' | 'recusada';
+export type StatusSolicitacao = 'pendente' | 'aceita' | 'recusada' | 'expirada';
 
 export interface Solicitacao {
   id: string;
@@ -130,7 +208,12 @@ export interface Solicitacao {
 export interface Avaliacao {
   reservaId: string;
   autorId: string;
+  /** Papel de quem avaliou: define quem é o alvo (veículo/proprietário ou locatário). */
+  autorPapel: Papel;
   alvoId: string;
+  enviadaEm: string;
+  /** Preenchido quando a avaliação é publicada (RF06). */
+  publicadaEm: string | null;
   nota: 1 | 2 | 3 | 4 | 5;
   texto: string;
   selos: string[];
@@ -148,4 +231,130 @@ export interface Repasse {
   liquido: number;
   status: StatusRepasse;
   pagoEm: string | null;
+}
+
+/** Estados da caução (§4.3). */
+export type StatusCaucao =
+  | 'PENDENTE_PRE_AUTORIZACAO'
+  | 'PRE_AUTORIZADA'
+  | 'FALHA'
+  | 'RETIDA_EM_DISPUTA'
+  | 'CAPTURADA_TOTAL'
+  | 'CAPTURADA_PARCIAL'
+  | 'LIBERADA';
+
+export interface DepositHold {
+  reservaId: string;
+  valor: number;
+  status: StatusCaucao;
+  preAutorizadaEm: string | null;
+  /** Validade da pré-autorização do cartão (deve cobrir locação + prazo de disputa). */
+  validaAte: string | null;
+  /** Valor efetivamente capturado (só após decisão registrada). */
+  valorCapturado: number;
+  liberarEm: string | null;
+}
+
+/** Estados da disputa (§4.4). */
+export type StatusDisputa =
+  | 'ABERTA'
+  | 'AGUARDANDO_CONTESTACAO'
+  | 'CONTESTADA'
+  | 'NAO_CONTESTADA_NO_PRAZO'
+  | 'EM_ANALISE'
+  | 'DECIDIDA';
+
+export type TipoDecisao = 'captura_total' | 'captura_parcial' | 'liberacao';
+
+export interface DecisaoDisputa {
+  tipo: TipoDecisao;
+  valor: number;
+  justificativa: string;
+  decididaPor: string;
+  decididaEm: string;
+}
+
+export interface Dispute {
+  id: string;
+  reservaId: string;
+  status: StatusDisputa;
+  /** DamageReport do proprietário. */
+  avaria: { descricao: string; qtdFotos: number; informadaEm: string; valorEstimado: number };
+  contestacao: { texto: string; qtdEvidencias: number; enviadaEm: string } | null;
+  contestarAte: string;
+  decisao: DecisaoDisputa | null;
+}
+
+export type StatusPagamento =
+  | 'pendente'
+  | 'finalizado'
+  | 'falhou'
+  | 'estornado_parcial'
+  | 'estornado_total';
+
+export interface Payment {
+  reservaId: string;
+  valorDiaria: number;
+  taxaPlataforma: number;
+  desconto: number;
+  total: number;
+  estornado: number;
+  status: StatusPagamento;
+  pagoEm: string | null;
+}
+
+/** Registro de auditoria (RNF02): quem, quando, de/para. */
+export interface AuditEntry {
+  entidade: 'reserva' | 'caucao' | 'disputa' | 'pagamento' | 'kyc';
+  entidadeId: string;
+  de: string | null;
+  para: string;
+  ator: string;
+  em: string;
+  motivo?: string;
+}
+
+export type CanalNotificacao = 'push' | 'email' | 'sms';
+export type TipoNotificacao = 'revisao_agenda' | 'demanda_local' | 'radar' | 'avaria_informada';
+
+/** Notificação enviada, com o dado que a justificou (RNF03). */
+export interface Notificacao {
+  id: string;
+  userId: string;
+  canal: CanalNotificacao;
+  tipo: TipoNotificacao;
+  titulo: string;
+  texto: string;
+  link: string | null;
+  motivoDados: Record<string, unknown>;
+  enviadaEm: string;
+  abertaEm: string | null;
+}
+
+/** Busca salva do locatário (RF14): localização aproximada, nunca exata. */
+export interface SavedSearch {
+  id: string;
+  renterId: string;
+  regiao: string;
+  raioKm: number;
+  inicio: string;
+  fim: string;
+  categoria: string;
+  precoMax: number | null;
+  alertasAtivos: boolean;
+  pausada: boolean;
+  criadaEm: string;
+}
+
+/** Template do "liberar agenda com um toque" (RF11). */
+export interface AvailabilityTemplate {
+  tipo: 'proximo_fim_de_semana' | 'sexta_a_domingo';
+  /** Quantidade de semanas (só em `sexta_a_domingo`). */
+  semanas: number;
+}
+
+/** Preferências do anúncio que melhoram o próximo ciclo (RF17). */
+export interface PreferenciasAnuncio {
+  antecedenciaMinimaHoras: number;
+  duracaoMinimaDias: number;
 }

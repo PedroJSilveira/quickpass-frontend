@@ -1,4 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { EventBusService } from '../../core/analytics/event-bus.service';
+import { AuthService } from '../../core/services/auth.service';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -65,7 +67,15 @@ export class DetalheComponent {
   private route = inject(ActivatedRoute);
   private id = toSignal(this.route.paramMap, { requireSync: true });
 
-  veiculo = computed(() => this.catalog.porId(this.id().get('id') ?? ''));
+  /** Visão pública: sem endereço exato, placa nem sobrenome do proprietário (RNF02). */
+  veiculo = computed(() => this.catalog.publicoPorId(this.id().get('id') ?? ''));
 
-  constructor(public catalog: CatalogService, public pricing: PricingService) {}
+  constructor(public catalog: CatalogService, public pricing: PricingService, bus: EventBusService, auth: AuthService) {
+    // Veio de um alerta do Radar? A solicitação seguinte é registrada com origem = radar (RF14).
+    this.catalog.origemSolicitacao.set(this.route.snapshot.queryParamMap.get('origem') === 'radar' ? 'radar' : 'busca');
+    effect(() => {
+      const v = this.veiculo();
+      if (v) untracked(() => bus.emitir('disponibilidade_visualizada', { user_id: auth.conta().id, vehicle_id: v.id }));
+    });
+  }
 }

@@ -3,10 +3,9 @@ import { Repasse } from '../models/domain.models';
 import { PricingService } from './pricing.service';
 
 /**
- * Repasses ao proprietário. Regra: repasse é liberado (visível como
- * "Previsto") quando a reserva entra em `em_andamento`, e pago em D+2 após
- * o `concluida` (aqui simplificado — a orquestração real ficaria num job
- * assíncrono disparado por evento de outbox).
+ * Repasses ao proprietário. Regra: aparece como "Previsto" quando a reserva
+ * entra em `em_andamento` e só é pago após `concluida` + caução resolvida
+ * (a orquestração real ficaria num job assíncrono do backend).
  */
 @Injectable({ providedIn: 'root' })
 export class PayoutService {
@@ -34,8 +33,27 @@ export class PayoutService {
       .reduce((total, r) => total + r.liquido, 0),
   );
 
-  registrarPrevisto(params: { reservaId: string; veiculoId: string; veiculoTitulo: string; periodo: string; bruto: number }): void {
-    const taxa = params.bruto * (this.pricing.taxaPct / 100);
+  /** Repasse existente (Previsto ou Pago) para a reserva? */
+  daReserva(reservaId: string): Repasse | undefined {
+    return this._repasses().find((r) => r.reservaId === reservaId);
+  }
+
+  /**
+   * Efetiva o repasse. Só deve ser chamado pelo BookingService quando a reserva
+   * está CONCLUIDA e a caução resolvida (RF12).
+   */
+  pagar(reservaId: string, pagoEm: string): Repasse | undefined {
+    const atual = this.daReserva(reservaId);
+    if (!atual || atual.status === 'Pago') return atual;
+    const pago: Repasse = { ...atual, status: 'Pago', pagoEm };
+    this._repasses.update((l) => l.map((r) => (r.reservaId === reservaId ? pago : r)));
+    return pago;
+  }
+
+  registrarPrevisto(params: { reservaId: string; veiculoId: string; veiculoTitulo: string; periodo: string; bruto: number; desconto?: number }): void {
+    if (this.daReserva(params.reservaId)) return;
+    // Desconto do experimento RF09 isenta (parte da) taxa de intermediação.
+    const taxa = Math.max(0, params.bruto * (this.pricing.taxaPct / 100) - (params.desconto ?? 0));
     const repasse: Repasse = {
       reservaId: params.reservaId,
       veiculoId: params.veiculoId,

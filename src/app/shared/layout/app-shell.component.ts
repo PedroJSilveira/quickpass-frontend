@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { LucideAngularModule, Car, Search, ClipboardList, User, LayoutDashboard, CarFront, Inbox, Wallet, ExternalLink } from 'lucide-angular';
+import { LucideAngularModule, Bell, Bookmark, Car, Search, ClipboardList, User, LayoutDashboard, CarFront, Inbox, Wallet, ExternalLink } from 'lucide-angular';
 import { AuthService } from '../../core/services/auth.service';
 import { OwnerService } from '../../core/services/owner.service';
 import { Papel } from '../../core/models/domain.models';
@@ -119,6 +119,7 @@ export class AppShellComponent {
   private readonly navPrimarioLocatario: NavItem[] = [
     { rota: '/buscar', label: 'Buscar carros', icon: Search },
     { rota: '/locacoes', label: 'Minhas locações', icon: ClipboardList },
+    { rota: '/buscas-salvas', label: 'Buscas salvas', icon: Bookmark },
   ];
 
   private readonly navPrimarioProprietario: NavItem[] = [
@@ -134,7 +135,10 @@ export class AppShellComponent {
   ];
 
   private readonly navSecundario: NavItem[] = [
+    { rota: '/notificacoes', label: 'Notificações', icon: Bell },
     { rota: '/perfil', label: 'Perfil', icon: User },
+    { rota: '/admin/disputas', label: 'Mediação', icon: Inbox, muted: true },
+    { rota: '/admin/metricas', label: 'Métricas', icon: LayoutDashboard, muted: true },
     { rota: '/', label: 'Ver site', icon: ExternalLink, muted: true },
   ];
 

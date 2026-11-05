@@ -23,7 +23,7 @@ import { TagComponent } from '../../shared/components/tag.component';
             <div class="qp-row-between">
               <span class="card-title">{{ s.veiculoTitulo }}</span>
               <qp-tag [variant]="s.status === 'pendente' ? 'accent' : 'neutral'">
-                {{ s.status === 'pendente' ? 'Aguardando você' : s.status === 'aceita' ? 'Aceita' : 'Recusada' }}
+                {{ rotulo(s.status) }}
               </qp-tag>
             </div>
             <div class="card-meta">{{ pricing.formatarPeriodo(s.solicitacao.inicio, s.solicitacao.fim) }} · {{ s.diasFmt }}</div>
@@ -83,6 +83,10 @@ export class SolicitacoesComponent {
       };
     }),
   );
+
+  rotulo(status: string): string {
+    return { pendente: 'Aguardando você', aceita: 'Aprovada', recusada: 'Recusada', expirada: 'Expirada' }[status] ?? status;
+  }
 
   aceitar(id: string): void {
     this.owner.aceitar(id);
