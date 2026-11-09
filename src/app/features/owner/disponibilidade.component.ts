@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -6,6 +6,8 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { CatalogService } from '../../core/services/catalog.service';
 import { OwnerService } from '../../core/services/owner.service';
 import { AvailabilityTemplate, Disponibilidade } from '../../core/models/domain.models';
+import { mensagemErro } from '../../core/api/api.service';
+import { Previa, ResultadoUmToque } from '../../core/services/owner.service';
 import { BackButtonComponent } from '../../shared/components/back-button.component';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { CheckboxModule } from 'primeng/checkbox';
@@ -61,7 +63,7 @@ import { CheckboxModule } from 'primeng/checkbox';
           }
           <button class="btn btn-ghost" (click)="salvarTemplate()">Salvar template</button>
         </div>
-        @if (previa(v.id); as p) {
+        @if (previa(); as p) {
           @if (p.motivos.length) {
             <p class="text-muted" style="font-size: 13px;">Não é possível publicar: {{ p.motivos.join(' ') }}</p>
           } @else {
@@ -109,89 +111,104 @@ export class DisponibilidadeComponent {
   private disponibilidade = signal<Disponibilidade>({ veiculoId: '', dias: {}, aceiteAutomatico: false });
   diaria = 0;
   aceiteAutomatico = false;
+  antecedencia = 0;
+  duracao = 1;
 
   dias = computed(() =>
-    Object.entries(this.disponibilidade().dias).map(([iso, ativo]) => ({
-      iso,
-      numero: Number(iso.slice(-2)),
-      ativo,
-    })),
+    Object.entries(this.disponibilidade().dias).map(([iso, ativo]) => ({ iso, numero: Number(iso.slice(-2)), ativo })),
   );
 
+  erro = signal('');
+  template = signal<AvailabilityTemplate>({ tipo: 'proximo_fim_de_semana', semanas: 2 });
+  previa = signal<Previa | null>(null);
+  resultado = signal<ResultadoUmToque | null>(null);
+  sugestoes = signal<string[]>([]);
+
   constructor(private catalog: CatalogService, private owner: OwnerService, private router: Router) {
-    const t = this.owner.template();
-    if (t) this.template.set(t);
-    const v = this.veiculo();
-    if (v) {
-      const d = this.owner.disponibilidadeDoVeiculo(v.id);
+    effect(() => {
+      const id = this.paramMap().get('id') ?? '';
+      untracked(() => void this.carregar(id));
+    });
+  }
+
+  private async carregar(id: string): Promise<void> {
+    try {
+      await this.catalog.carregarMeus();
+      const v = this.catalog.porId(id);
+      if (v) this.diaria = v.diaria;
+      const [d, pref, , sug] = await Promise.all([
+        this.owner.disponibilidade(id),
+        this.owner.preferencias(id),
+        this.owner.carregarTemplate(),
+        this.owner.sugerirDatas(id),
+      ]);
       this.disponibilidade.set(d);
-      this.diaria = v.diaria;
       this.aceiteAutomatico = d.aceiteAutomatico;
-      const pref = this.owner.preferencias(v.id);
       this.antecedencia = pref.antecedenciaMinimaHoras;
       this.duracao = pref.duracaoMinimaDias;
+      this.sugestoes.set(sug);
+      const t = this.owner.template();
+      if (t) this.template.set(t);
+      await this.atualizarPrevia(id);
+    } catch (e) {
+      this.erro.set(mensagemErro(e));
     }
+  }
+
+  /** Sem template salvo o servidor não gera prévia: salva o escolhido na tela primeiro. */
+  private async atualizarPrevia(id: string): Promise<void> {
+    if (!this.owner.template()) await this.owner.salvarTemplate(this.template());
+    this.previa.set(await this.owner.previaUmToque(id));
   }
 
   alternar(iso: string): void {
     this.disponibilidade.update((d) => ({ ...d, dias: { ...d.dias, [iso]: !d.dias[iso] } }));
   }
 
-  erro = signal('');
-  template = signal<AvailabilityTemplate>({ tipo: 'proximo_fim_de_semana', semanas: 2 });
-  resultado = signal<ReturnType<OwnerService['liberarComUmToque']> | null>(null);
-  antecedencia = 0;
-  duracao = 1;
-  sugestoes = computed(() => (this.veiculo() ? this.owner.sugerirDatas(this.veiculo()!.id) : []));
-
   definirTemplate(patch: Partial<AvailabilityTemplate>): void {
     this.template.update((t) => ({ ...t, ...patch }));
   }
 
-  salvarTemplate(): void {
-    this.owner.salvarTemplate(this.template());
+  async salvarTemplate(): Promise<void> {
+    await this.agir(async () => {
+      await this.owner.salvarTemplate(this.template());
+      await this.atualizarPrevia(this.paramMap().get('id') ?? '');
+    });
   }
 
-  previa(id: string) {
-    this.owner.template() ?? this.owner.salvarTemplate(this.template());
-    return this.owner.previaUmToque(id);
+  async liberar(id: string): Promise<void> {
+    await this.agir(async () => {
+      this.resultado.set(await this.owner.liberarComUmToque(id));
+      this.disponibilidade.set(await this.owner.disponibilidade(id));
+      await this.atualizarPrevia(id);
+    });
   }
 
-  liberar(id: string): void {
-    this.erro.set('');
-    try {
-      this.resultado.set(this.owner.liberarComUmToque(id));
-      this.disponibilidade.set(this.owner.disponibilidadeDoVeiculo(id));
-    } catch (e) {
-      this.erro.set((e as Error).message);
-    }
-  }
-
-  desfazer(id: string): void {
-    this.erro.set('');
-    try {
-      this.owner.desfazer(id);
+  async desfazer(id: string): Promise<void> {
+    await this.agir(async () => {
+      await this.owner.desfazer(id);
       this.resultado.set(null);
-      this.disponibilidade.set(this.owner.disponibilidadeDoVeiculo(id));
-    } catch (e) {
-      this.erro.set((e as Error).message);
-    }
+      this.disponibilidade.set(await this.owner.disponibilidade(id));
+      await this.atualizarPrevia(id);
+    });
   }
 
-  salvar(veiculoId: string): void {
-    this.owner.salvarPreferencias(veiculoId, { antecedenciaMinimaHoras: this.antecedencia, duracaoMinimaDias: this.duracao });
+  async salvar(veiculoId: string): Promise<void> {
+    await this.agir(async () => {
+      await this.owner.salvarPreferencias(veiculoId, { antecedenciaMinimaHoras: this.antecedencia, duracaoMinimaDias: this.duracao });
+      // Publicar agenda exige KYC aprovado (RF02): o servidor recusa com 403 e a mensagem aparece aqui.
+      await this.owner.salvarDisponibilidade({ ...this.disponibilidade(), veiculoId, aceiteAutomatico: this.aceiteAutomatico });
+      if (this.diaria !== this.veiculo()?.diaria) await this.catalog.atualizar(veiculoId, { diaria: this.diaria });
+      this.router.navigate(['/proprietario/veiculos']);
+    });
+  }
+
+  private async agir(f: () => Promise<void>): Promise<void> {
+    this.erro.set('');
     try {
-      this.owner.salvarDisponibilidade({
-        ...this.disponibilidade(),
-        veiculoId,
-        aceiteAutomatico: this.aceiteAutomatico,
-      });
+      await f();
     } catch (e) {
-      // Ex.: KYC não aprovado — publicar agenda exige verificação (RF02).
-      this.erro.set((e as Error).message);
-      return;
+      this.erro.set(mensagemErro(e));
     }
-    this.catalog.atualizar(veiculoId, { diaria: this.diaria });
-    this.router.navigate(['/proprietario/veiculos']);
   }
 }

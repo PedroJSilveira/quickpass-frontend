@@ -1,7 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { AuthService } from '../../core/services/auth.service';
 import { PricingService } from '../../core/services/pricing.service';
 import { SavedSearchService } from '../../core/services/saved-search.service';
 import { TagComponent } from '../../shared/components/tag.component';
@@ -16,11 +15,11 @@ import { TagComponent } from '../../shared/components/tag.component';
     <div class="qp-screen-kicker">Locatário</div>
     <h4 class="qp-screen-title">Buscas salvas</h4>
 
-    @if (minhas().length === 0) {
+    @if (saved.buscas().length === 0) {
       <div class="qp-empty">Nenhuma busca salva. Salve uma busca para ser avisado quando surgir um carro realmente disponível.</div>
     }
     <div class="qp-stack">
-      @for (b of minhas(); track b.id) {
+      @for (b of saved.buscas(); track b.id) {
         <div class="card">
           <div class="qp-row-between">
             <span class="card-title">{{ b.regiao }} · {{ b.categoria }}</span>
@@ -43,13 +42,14 @@ import { TagComponent } from '../../shared/components/tag.component';
     </div>
   `,
 })
-export class BuscasSalvasComponent {
+export class BuscasSalvasComponent implements OnInit {
   saved = inject(SavedSearchService);
   pricing = inject(PricingService);
-  private auth = inject(AuthService);
   private router = inject(Router);
 
-  minhas = computed(() => this.saved.buscas().filter((b) => b.renterId === this.auth.conta().id));
+  ngOnInit(): void {
+    void this.saved.carregar();
+  }
 
   usar(id: string): void {
     this.saved.aplicar(id);

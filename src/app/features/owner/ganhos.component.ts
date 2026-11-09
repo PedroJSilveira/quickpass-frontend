@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { PayoutService } from '../../core/services/payout.service';
 import { PricingService } from '../../core/services/pricing.service';
@@ -27,11 +27,11 @@ import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame
     <div class="qp-stack" style="margin: var(--space-4) 0;">
       <h5>Como a locação se divide</h5>
       <div class="qp-row" style="height: 28px;">
-        <div style="width: 85%; background: var(--color-accent); color: var(--color-bg); display: flex; align-items: center; padding-left: 8px; font-size: 12px;">
-          85% proprietário
+        <div [style.width.%]="100 - pricing.taxaPct" style="background: var(--color-accent); color: var(--color-bg); display: flex; align-items: center; padding-left: 8px; font-size: 12px;">
+          {{ 100 - pricing.taxaPct }}% proprietário
         </div>
-        <div style="width: 15%; background: var(--color-bg); border: 1px solid var(--color-divider); display: flex; align-items: center; justify-content: center; font-size: 12px;">
-          15% taxa
+        <div [style.width.%]="pricing.taxaPct" style="background: var(--color-bg); border: 1px solid var(--color-divider); display: flex; align-items: center; justify-content: center; font-size: 12px;">
+          {{ pricing.taxaPct }}% taxa
         </div>
       </div>
       <p class="text-muted" style="font-size: 12px;">
@@ -62,6 +62,10 @@ import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame
     </table>
   `,
 })
-export class GanhosComponent {
+export class GanhosComponent implements OnInit {
   constructor(public payout: PayoutService, public pricing: PricingService) {}
+
+  ngOnInit(): void {
+    void this.payout.carregar();
+  }
 }

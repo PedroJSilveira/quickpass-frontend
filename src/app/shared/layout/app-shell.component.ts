@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { LucideAngularModule, Bell, Bookmark, Car, Search, ClipboardList, User, LayoutDashboard, CarFront, Inbox, Wallet, ExternalLink } from 'lucide-angular';
+import { effect } from '@angular/core';
+import { LucideAngularModule, Bell, Bookmark, Car, Search, ClipboardList, User, LayoutDashboard, CarFront, Inbox, Wallet, ExternalLink, ShieldCheck, ClipboardCheck } from 'lucide-angular';
 import { AuthService } from '../../core/services/auth.service';
 import { OwnerService } from '../../core/services/owner.service';
 import { Papel } from '../../core/models/domain.models';
@@ -79,24 +80,34 @@ interface NavItem {
 
       <div class="qp-content">
         <header class="qp-topbar">
-          <qp-seg-control
-            [options]="papelOptions"
-            [value]="auth.papelAtivo()"
-            (valueChange)="trocarPapel($event)"
-          />
-          <div class="qp-row" style="margin-left: auto; gap: var(--space-3);">
-            <span class="qp-avatar" style="width: 32px; height: 32px; font-size: 12px;">{{ iniciais() }}</span>
-            <span style="font-size: 13px;">
-              {{ auth.conta().nome }}
-              <br />
-              <span
-                style="font-size: 11px;"
-                [style.color]="auth.contaVerificada() ? 'var(--color-accent-700)' : 'var(--color-neutral-600)'"
-              >
-                {{ auth.contaVerificada() ? 'Verificado' : 'Verificação pendente' }}
+          @if (auth.logado() && !auth.admin() && papelOptions().length > 1) {
+            <qp-seg-control
+              [options]="papelOptions()"
+              [value]="auth.papelAtivo()"
+              (valueChange)="trocarPapel($event)"
+            />
+          }
+          @if (auth.logado()) {
+            <div class="qp-row" style="margin-left: auto; gap: var(--space-3);">
+              <span class="qp-avatar" style="width: 32px; height: 32px; font-size: 12px;">{{ iniciais() }}</span>
+              <span style="font-size: 13px;">
+                {{ auth.conta().nome }}
+                <br />
+                <span
+                  style="font-size: 11px;"
+                  [style.color]="auth.admin() || auth.contaVerificada() ? 'var(--color-accent-700)' : 'var(--color-neutral-600)'"
+                >
+                  {{ auth.admin() ? 'Administrador' : auth.contaVerificada() ? 'Verificado' : 'Verificação pendente' }}
+                </span>
               </span>
-            </span>
-          </div>
+              <button class="btn btn-ghost" type="button" (click)="sair()">Sair</button>
+            </div>
+          } @else {
+            <div class="qp-row" style="margin-left: auto; gap: var(--space-2);">
+              <a class="btn btn-ghost" routerLink="/entrar">Entrar</a>
+              <a class="btn btn-primary" routerLink="/cadastro">Criar conta</a>
+            </div>
+          }
         </header>
 
         <main class="qp-main">
@@ -111,10 +122,13 @@ interface NavItem {
 export class AppShellComponent {
   readonly CarIcon = Car;
 
-  papelOptions: SegOption<Papel>[] = [
-    { label: 'Locatário', value: 'locatario' },
-    { label: 'Proprietário', value: 'proprietario' },
-  ];
+  papelOptions = computed<SegOption<Papel>[]>(() =>
+    (['locatario', 'proprietario'] as Papel[])
+      .filter((p) => this.auth.temPapel(p))
+      .map((p) => ({ label: p === 'locatario' ? 'Locatário' : 'Proprietário', value: p })),
+  );
+
+  private readonly navPublico: NavItem[] = [{ rota: '/buscar', label: 'Buscar carros', icon: Search }];
 
   private readonly navPrimarioLocatario: NavItem[] = [
     { rota: '/buscar', label: 'Buscar carros', icon: Search },
@@ -131,29 +145,42 @@ export class AppShellComponent {
       icon: Inbox,
       badge: () => this.owner.solicitacoesPendentes().length,
     },
+    { rota: '/proprietario/reservas', label: 'Reservas', icon: ClipboardList },
     { rota: '/proprietario/ganhos', label: 'Ganhos', icon: Wallet },
   ];
 
-  private readonly navSecundario: NavItem[] = [
-    { rota: '/notificacoes', label: 'Notificações', icon: Bell },
-    { rota: '/perfil', label: 'Perfil', icon: User },
-    { rota: '/admin/disputas', label: 'Mediação', icon: Inbox, muted: true },
-    { rota: '/admin/metricas', label: 'Métricas', icon: LayoutDashboard, muted: true },
-    { rota: '/', label: 'Ver site', icon: ExternalLink, muted: true },
+  private readonly navAdmin: NavItem[] = [
+    { rota: '/admin/veiculos', label: 'Moderação de veículos', icon: ClipboardCheck },
+    { rota: '/admin/disputas', label: 'Mediação de disputas', icon: ShieldCheck },
+    { rota: '/admin/metricas', label: 'Métricas', icon: LayoutDashboard },
   ];
 
   constructor(
     public auth: AuthService,
     private owner: OwnerService,
     private router: Router,
-  ) {}
+  ) {
+    // Mantém o selo de solicitações pendentes do proprietário atualizado ao trocar de tela/papel.
+    effect(() => {
+      if (this.auth.logado() && !this.auth.admin() && this.auth.papelAtivo() === 'proprietario' && this.auth.temPapel('proprietario')) {
+        void this.owner.carregarSolicitacoes().catch(() => undefined);
+      }
+    });
+  }
 
   itensNavPrimario(): NavItem[] {
+    if (!this.auth.logado()) return this.navPublico;
+    if (this.auth.admin()) return this.navAdmin;
     return this.auth.papelAtivo() === 'locatario' ? this.navPrimarioLocatario : this.navPrimarioProprietario;
   }
 
   itensNavSecundario(): NavItem[] {
-    return this.navSecundario;
+    if (!this.auth.logado()) return [{ rota: '/', label: 'Ver site', icon: ExternalLink, muted: true }];
+    return [
+      { rota: '/notificacoes', label: 'Notificações', icon: Bell },
+      { rota: '/perfil', label: 'Perfil', icon: User },
+      { rota: '/', label: 'Ver site', icon: ExternalLink, muted: true },
+    ];
   }
 
   iniciais(): string {
@@ -169,5 +196,10 @@ export class AppShellComponent {
   trocarPapel(papel: Papel): void {
     this.auth.alternarPapel(papel);
     this.router.navigate([papel === 'locatario' ? '/buscar' : '/proprietario']);
+  }
+
+  async sair(): Promise<void> {
+    await this.auth.sair();
+    this.router.navigate(['/']);
   }
 }

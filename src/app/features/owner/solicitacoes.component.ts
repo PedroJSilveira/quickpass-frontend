@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { OwnerService } from '../../core/services/owner.service';
-import { CatalogService } from '../../core/services/catalog.service';
+import { mensagemErro } from '../../core/api/api.service';
 import { PricingService } from '../../core/services/pricing.service';
 import { TagComponent } from '../../shared/components/tag.component';
 
@@ -33,12 +33,15 @@ import { TagComponent } from '../../shared/components/tag.component';
               <div class="qp-stack" style="gap: 2px;">
                 <strong>{{ s.solicitacao.locatario.nome }}</strong>
                 <span class="card-meta">
-                  {{ s.solicitacao.locatario.idade }} anos · CNH há {{ s.solicitacao.locatario.cnhAnos }} anos ·
+                  CNH há {{ s.solicitacao.locatario.cnhAnos }} anos ·
                   ★ {{ s.solicitacao.locatario.nota }} · {{ s.solicitacao.locatario.locacoes }} viagens
                 </span>
               </div>
             </div>
 
+            @if (erro()) {
+              <p class="text-muted" style="font-size: 13px;">{{ erro() }}</p>
+            }
             <div class="qp-hairline-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: var(--space-2);">
               <div><strong>Identidade e CNH</strong><br />Verificadas</div>
               <div><strong>Finalidade declarada</strong><br />{{ s.solicitacao.finalidade }}</div>
@@ -63,19 +66,24 @@ import { TagComponent } from '../../shared/components/tag.component';
     }
   `,
 })
-export class SolicitacoesComponent {
-  constructor(private owner: OwnerService, private catalog: CatalogService, public pricing: PricingService) {}
+export class SolicitacoesComponent implements OnInit {
+  erro = signal('');
+
+  constructor(private owner: OwnerService, public pricing: PricingService) {}
+
+  ngOnInit(): void {
+    void this.owner.carregarSolicitacoes();
+  }
 
   itens = computed(() =>
     this.owner.solicitacoes().map((s) => {
-      const v = this.catalog.porId(s.veiculoId);
       const dias = this.pricing.dias(s.inicio, s.fim);
       const bruto = s.diaria * dias;
       const repasse = bruto - bruto * (this.pricing.taxaPct / 100);
       return {
         id: s.id,
         solicitacao: s,
-        veiculoTitulo: v?.titulo ?? 'Veículo',
+        veiculoTitulo: s.veiculoTitulo,
         status: s.status,
         diasFmt: dias + (dias > 1 ? ' diárias' : ' diária'),
         iniciais: s.locatario.nome.split(' ').map((p) => p[0]).slice(0, 2).join(''),
@@ -88,11 +96,20 @@ export class SolicitacoesComponent {
     return { pendente: 'Aguardando você', aceita: 'Aprovada', recusada: 'Recusada', expirada: 'Expirada' }[status] ?? status;
   }
 
-  aceitar(id: string): void {
-    this.owner.aceitar(id);
+  async aceitar(id: string): Promise<void> {
+    await this.agir(() => this.owner.aceitar(id));
   }
 
-  recusar(id: string): void {
-    this.owner.recusar(id);
+  async recusar(id: string): Promise<void> {
+    await this.agir(() => this.owner.recusar(id));
+  }
+
+  private async agir(f: () => Promise<void>): Promise<void> {
+    this.erro.set('');
+    try {
+      await f();
+    } catch (e) {
+      this.erro.set(mensagemErro(e));
+    }
   }
 }

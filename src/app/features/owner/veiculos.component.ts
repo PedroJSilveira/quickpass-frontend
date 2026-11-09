@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { AuthService } from '../../core/services/auth.service';
+import { urlImagem } from '../../core/api/api.config';
 import { CatalogService } from '../../core/services/catalog.service';
 import { PricingService } from '../../core/services/pricing.service';
 import { TagComponent } from '../../shared/components/tag.component';
@@ -18,12 +18,15 @@ import { TagComponent } from '../../shared/components/tag.component';
     <div class="qp-grid-2" style="margin-bottom: var(--space-4);">
       @for (v of meusVeiculos(); track v.id) {
         <div class="card" style="padding: 0; background: transparent;">
-          <div class="qp-photo" [style.background-image]="'url(' + v.foto + ')'"></div>
+          <div class="qp-photo" [style.background-image]="'url(' + img(v.foto) + ')'"></div>
           <div class="qp-stack" style="padding: var(--space-3);">
             <div class="qp-row-between">
               <span class="card-title">{{ v.titulo }}</span>
               <qp-tag [variant]="v.status === 'Aprovado' ? 'accent' : 'neutral'">{{ v.status }}</qp-tag>
             </div>
+            @if (v.status === 'Recusado' && v.motivoRecusa) {
+              <span class="card-meta">Motivo da recusa: {{ v.motivoRecusa }}</span>
+            }
             <span class="card-meta">{{ pricing.moneyRounded(v.diaria) }}/dia · {{ v.placa }} · {{ v.locacoes }} locações</span>
             <div class="qp-row">
               <a class="btn btn-secondary" [routerLink]="['/proprietario/veiculos', v.id, 'disponibilidade']">Disponibilidade</a>
@@ -38,8 +41,14 @@ import { TagComponent } from '../../shared/components/tag.component';
     <a class="btn btn-primary" routerLink="/proprietario/veiculos/novo">Cadastrar veículo</a>
   `,
 })
-export class VeiculosComponent {
-  constructor(private auth: AuthService, private catalog: CatalogService, public pricing: PricingService) {}
+export class VeiculosComponent implements OnInit {
+  img = urlImagem;
 
-  meusVeiculos = computed(() => this.catalog.doProprietario(this.auth.conta().id));
+  constructor(private catalog: CatalogService, public pricing: PricingService) {}
+
+  ngOnInit(): void {
+    void this.catalog.carregarMeus();
+  }
+
+  meusVeiculos = computed(() => this.catalog.meusVeiculos());
 }

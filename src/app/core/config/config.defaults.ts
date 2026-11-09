@@ -2,6 +2,9 @@
  * Parâmetros configuráveis (QUICKPASS_REQUISITOS.md §11, RNF04).
  * Nenhuma regra de negócio deve usar número literal: leia via AppConfigService.
  *
+ * Estes são só valores de reserva até a API responder: a fonte da verdade é o backend
+ * (`GET /api/config/publica`), carregada no início do app.
+ *
  * Chaves marcadas em `PROVISORIOS` estão "a definir" no documento. O valor
  * abaixo é só um padrão provisório para o protótipo funcionar e DEVE ser
  * validado pela equipe (pontos em aberto §14).
@@ -45,6 +48,8 @@ export const CONFIG_DEFAULTS = {
   EXP_RF09_ATIVACAO_DIAS: 30, // provisório
   /** Fotos obrigatórias por vistoria (RF03). */
   FOTOS_VISTORIA_OBRIGATORIAS: 7,
+  /** Fotos mínimas para anunciar um veículo. */
+  FOTOS_VEICULO_MINIMAS: 6,
 } as const;
 
 export type ConfigKey = keyof typeof CONFIG_DEFAULTS;

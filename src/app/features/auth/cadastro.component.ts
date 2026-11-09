@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -6,6 +6,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { LucideAngularModule, User, Mail, IdCard, Lock, Search, CarFront } from 'lucide-angular';
 import { AuthService } from '../../core/services/auth.service';
 import { Papel } from '../../core/models/domain.models';
+import { mensagemErro } from '../../core/api/api.service';
 import { BackButtonComponent } from '../../shared/components/back-button.component';
 
 interface CopyPerfil {
@@ -92,34 +93,46 @@ const COPY: Record<Papel, CopyPerfil> = {
               <label for="senha">Senha</label>
               <div class="qp-input-icon">
                 <lucide-icon [img]="LockIcon" [size]="16" />
-                <input id="senha" pInputText type="password" [(ngModel)]="senha" name="senha" required minlength="8" />
+                <input id="senha" pInputText type="password" [(ngModel)]="senha" name="senha" required minlength="8" autocomplete="new-password" />
               </div>
               <span class="qp-hint" [class.qp-hint-ok]="senha.length >= 8">
                 {{ senha.length >= 8 ? '✓' : '•' }} mínimo de 8 caracteres
               </span>
             </div>
 
+            <div class="field">
+              <label for="cnh">Há quantos anos você tem CNH?</label>
+              <input id="cnh" pInputText type="number" min="0" max="80" [(ngModel)]="cnhAnos" name="cnhAnos" />
+            </div>
+
             <div class="qp-stack" style="gap: var(--space-2);">
-              <label class="qp-perfil-opt" [class.qp-perfil-sel]="perfil === 'locatario'">
-                <input type="radio" name="perfil" value="locatario" [(ngModel)]="perfil" style="display:none" />
+              <span class="text-muted" style="font-size: 12px;">Como você vai usar a QuickPass? (marque um ou os dois)</span>
+              <label class="qp-perfil-opt" [class.qp-perfil-sel]="locatario()">
+                <input type="checkbox" name="locatario" [checked]="locatario()" (change)="locatario.set($any($event.target).checked)" style="display:none" />
                 <span class="qp-perfil-icon"><lucide-icon [img]="SearchIcon" [size]="18" /></span>
                 <span class="qp-stack" style="gap: 2px;">
                   <strong>Quero alugar um carro</strong>
                   <span class="text-muted" style="font-size: 13px;">Buscar veículos disponíveis perto de mim.</span>
                 </span>
               </label>
-              <label class="qp-perfil-opt" [class.qp-perfil-sel]="perfil === 'proprietario'">
-                <input type="radio" name="perfil" value="proprietario" [(ngModel)]="perfil" style="display:none" />
+              <label class="qp-perfil-opt" [class.qp-perfil-sel]="proprietario()">
+                <input type="checkbox" name="proprietario" [checked]="proprietario()" (change)="proprietario.set($any($event.target).checked)" style="display:none" />
                 <span class="qp-perfil-icon"><lucide-icon [img]="CarFrontIcon" [size]="18" /></span>
                 <span class="qp-stack" style="gap: 2px;">
                   <strong>Quero alugar meu carro</strong>
                   <span class="text-muted" style="font-size: 13px;">Anunciar um veículo ocioso e ganhar dinheiro com ele.</span>
                 </span>
               </label>
+              @if (!locatario() && !proprietario()) {
+                <span class="text-muted" style="font-size: 12px;">Escolha ao menos uma opção.</span>
+              }
             </div>
 
-            <button class="btn btn-primary btn-block" type="submit" [disabled]="f.invalid">
-              Continuar para verificação
+            @if (erro()) {
+              <p role="alert" style="font-size: 13px; margin: 0; color: var(--color-danger, #b3261e);">{{ erro() }}</p>
+            }
+            <button class="btn btn-primary btn-block" type="submit" [disabled]="f.invalid || (!locatario() && !proprietario()) || enviando()">
+              {{ enviando() ? 'Criando conta…' : 'Continuar para verificação' }}
             </button>
           </form>
 
@@ -215,16 +228,33 @@ export class CadastroComponent {
   email = '';
   cpf = '';
   senha = '';
-  perfil: Papel = 'locatario';
+  cnhAnos: number | null = 0;
+  locatario = signal(true);
+  proprietario = signal(false);
+  erro = signal('');
+  enviando = signal(false);
+
+  /** A cópia lateral acompanha o papel escolhido (proprietário se for só ele). */
+  private perfilVisual = computed<Papel>(() => (this.proprietario() && !this.locatario() ? 'proprietario' : 'locatario'));
 
   constructor(private auth: AuthService, private router: Router) {}
 
   copy(): CopyPerfil {
-    return COPY[this.perfil];
+    return COPY[this.perfilVisual()];
   }
 
-  continuar(): void {
-    this.auth.cadastrar({ nome: this.nome, email: this.email, cpf: this.cpf, papel: this.perfil });
-    this.router.navigate(['/verificacao']);
+  async continuar(): Promise<void> {
+    this.erro.set('');
+    const papeis: Papel[] = [...(this.locatario() ? (['locatario'] as Papel[]) : []), ...(this.proprietario() ? (['proprietario'] as Papel[]) : [])];
+    if (!papeis.length) return;
+    this.enviando.set(true);
+    try {
+      await this.auth.cadastrar({ nome: this.nome, email: this.email, cpf: this.cpf, senha: this.senha, papeis, cnhAnos: Math.max(0, Number(this.cnhAnos) || 0) });
+      this.router.navigate(['/verificacao']);
+    } catch (e) {
+      this.erro.set(mensagemErro(e));
+    } finally {
+      this.enviando.set(false);
+    }
   }
 }

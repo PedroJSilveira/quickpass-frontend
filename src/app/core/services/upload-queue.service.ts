@@ -2,26 +2,23 @@ import { Injectable } from '@angular/core';
 import { FotoVistoria } from '../models/domain.models';
 
 export type AtualizarFoto = (patch: Partial<FotoVistoria>) => void;
+/** Faz o envio de verdade (HTTP multipart); lança se falhar. */
+export type EnviarArquivo = (blob: Blob, progresso: (p: number) => void) => Promise<void>;
 
 const MAX_TENTATIVAS = 4;
 
 /**
- * Fila de upload de fotos de vistoria (RNF01): compressão local, envio
- * sequencial em segundo plano, retentativa com backoff e espera por
- * conectividade. O status só vira `enviada` após a confirmação do "servidor"
- * (aqui simulado por `enviarAoServidor`, substituível por HttpClient).
+ * Fila de upload de fotos de vistoria (RNF01): compressão local, envio sequencial em segundo
+ * plano, retentativa com backoff e espera por conectividade. O status só vira `enviada` depois
+ * que o servidor responde 200 ao multipart.
  */
 @Injectable({ providedIn: 'root' })
 export class UploadQueueService {
-  /** Simulação de rede instável nos testes/demonstração (0..1). */
-  taxaFalhaSimulada = 0;
-  atrasoMs = 400;
   backoffBaseMs = 500;
-
   private fila: Promise<void> = Promise.resolve();
 
   /** Comprime a imagem no cliente (lado maior ≤ maxLado, JPEG). Sem DOM, devolve o arquivo original. */
-  async comprimir(arquivo: Blob, maxLado = 1280, qualidade = 0.7): Promise<Blob> {
+  async comprimir(arquivo: Blob, maxLado = 1600, qualidade = 0.8): Promise<Blob> {
     if (typeof document === 'undefined' || typeof createImageBitmap === 'undefined') return arquivo;
     try {
       const bmp = await createImageBitmap(arquivo);
@@ -38,40 +35,30 @@ export class UploadQueueService {
   }
 
   /** Enfileira o envio de uma foto; resolve quando enviada ou esgotadas as tentativas. */
-  enfileirar(arquivo: Blob, atualizar: AtualizarFoto): Promise<void> {
+  enfileirar(arquivo: Blob, atualizar: AtualizarFoto, enviar: EnviarArquivo): Promise<void> {
     atualizar({ status: 'na_fila', progresso: 0, tiradaEm: new Date().toISOString() });
-    this.fila = this.fila.then(() => this.processar(arquivo, atualizar));
+    this.fila = this.fila.then(() => this.processar(arquivo, atualizar, enviar));
     return this.fila;
   }
 
-  /** Reenvia manualmente uma foto que falhou. */
-  reenviar(arquivo: Blob, atualizar: AtualizarFoto): Promise<void> {
-    return this.enfileirar(arquivo, atualizar);
-  }
-
-  private async processar(arquivo: Blob, atualizar: AtualizarFoto): Promise<void> {
+  private async processar(arquivo: Blob, atualizar: AtualizarFoto, enviar: EnviarArquivo): Promise<void> {
     const comprimido = await this.comprimir(arquivo);
     for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
       await this.aguardarConexao();
       atualizar({ status: 'enviando', tentativas: tentativa, progresso: 0 });
       try {
-        await this.enviarAoServidor(comprimido, (p) => atualizar({ progresso: p }));
+        await enviar(comprimido, (p) => atualizar({ progresso: p }));
         atualizar({ status: 'enviada', progresso: 100 });
         return;
-      } catch {
+      } catch (e) {
+        // Recusa de negócio (4xx, ex.: formato inválido ou vistoria já concluída) não adianta repetir.
+        const status = (e as { status?: number }).status ?? 0;
+        if (status >= 400 && status < 500 && status !== 408 && status !== 429) break;
         if (tentativa === MAX_TENTATIVAS) break;
         await this.dormir(this.backoffBaseMs * 2 ** (tentativa - 1));
       }
     }
     atualizar({ status: 'falhou' });
-  }
-
-  private async enviarAoServidor(_blob: Blob, progresso: (p: number) => void): Promise<void> {
-    for (const p of [25, 60, 90]) {
-      await this.dormir(this.atrasoMs / 3);
-      progresso(p);
-    }
-    if (Math.random() < this.taxaFalhaSimulada) throw new Error('falha de rede simulada');
   }
 
   private async aguardarConexao(): Promise<void> {

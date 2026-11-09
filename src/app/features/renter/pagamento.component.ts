@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -6,6 +6,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { CatalogService } from '../../core/services/catalog.service';
 import { PricingService } from '../../core/services/pricing.service';
 import { BookingService } from '../../core/services/booking.service';
+import { mensagemErro } from '../../core/api/api.service';
 import { InputTextModule } from 'primeng/inputtext';
 import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame.component';
 import { SegControlComponent, SegOption } from '../../shared/components/seg-control.component';
@@ -43,7 +44,7 @@ type MetodoPagamento = 'pix' | 'cartao';
         </div>
       } @else {
         <p class="text-muted" style="margin: var(--space-4) 0;">
-          Um QR Code Pix será exibido após a confirmação (integração de pagamento fora do escopo deste protótipo).
+          O pagamento por Pix é simulado pelo gateway de teste: ao confirmar, a cobrança é aprovada.
         </p>
       }
 
@@ -71,7 +72,7 @@ type MetodoPagamento = 'pix' | 'cartao';
     }
   `,
 })
-export class PagamentoComponent {
+export class PagamentoComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private paramMap = toSignal(this.route.paramMap, { requireSync: true });
 
@@ -93,7 +94,7 @@ export class PagamentoComponent {
   erro = signal('');
   processando = signal(false);
 
-  valores = computed(() => this.reserva()?.valores ?? this.pricing.calcular(0, 'completa', '', ''));
+  valores = computed(() => this.reserva()?.valores ?? { diaria: 0, dias: 0, subtotal: 0, protecao: 0, taxa: 0, total: 0, repasse: 0, caucao: 0 });
 
   constructor(
     public catalog: CatalogService,
@@ -102,20 +103,27 @@ export class PagamentoComponent {
     private router: Router,
   ) {}
 
+  async ngOnInit(): Promise<void> {
+    const id = this.paramMap().get('id') ?? '';
+    await this.booking.carregarDetalhe(id);
+    const r = this.reserva();
+    if (r) await this.catalog.carregar(r.veiculoId);
+  }
+
   async pagar(): Promise<void> {
     const r = this.reserva();
     if (!r) return;
     this.erro.set('');
     this.processando.set(true);
     try {
-      const resultado = await this.booking.pagar(r.id);
+      const resultado = await this.booking.pagar(r.id, this.metodo(), this.metodo() === 'cartao' ? this.numero : undefined);
       if (resultado.status === 'confirmada') {
         this.router.navigate(['/locacoes']);
       } else {
         this.erro.set('Pagamento não concluído (diária ou caução recusada). As datas foram liberadas.');
       }
     } catch (e) {
-      this.erro.set((e as Error).message);
+      this.erro.set(mensagemErro(e));
     } finally {
       this.processando.set(false);
     }

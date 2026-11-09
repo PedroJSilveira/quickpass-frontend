@@ -1,18 +1,16 @@
-import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
-import { FotoChave, FotoVistoria, FotosVistoria } from '../../core/models/domain.models';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { FotoChave, FotosVistoria } from '../../core/models/domain.models';
 import { FOTOS_OBRIGATORIAS } from '../../core/services/booking.service';
-import { UploadQueueService } from '../../core/services/upload-queue.service';
 
-export interface FotoAlterada {
+export interface FotoEscolhida {
   chave: FotoChave;
-  patch: Partial<FotoVistoria>;
+  arquivo: File;
 }
 
 /**
- * Grade das 7 fotos obrigatórias da vistoria (RF03). Cada foto é comprimida
- * no cliente e enviada em segundo plano pela fila (RNF01), com progresso e
- * reenvio. O pai guarda o estado e só libera a confirmação quando todas
- * estiverem `enviada`.
+ * Grade das 7 fotos obrigatórias da vistoria (RF03). O arquivo escolhido sobe em multipart pela
+ * fila de upload (compressão, progresso, retentativa); o pai guarda o estado e só libera a
+ * confirmação quando todas estiverem `enviada` (confirmadas pelo servidor).
  */
 @Component({
   selector: 'qp-vistoria-fotos',
@@ -23,14 +21,14 @@ export interface FotoAlterada {
       @for (item of slots; track item.chave) {
         @let f = fotos()[item.chave];
         <label class="qp-foto-slot" [class.qp-foto-feita]="f.status === 'enviada'" [class.qp-foto-erro]="f.status === 'falhou'">
-          <input type="file" accept="image/*" capture="environment" hidden (change)="escolher(item.chave, $event)" />
+          <input type="file" accept="image/*" capture="environment" hidden [disabled]="desabilitado()" (change)="escolher(item.chave, $event)" />
           <span>[ {{ item.rotulo }} ]</span>
           <small>
             @switch (f.status) {
               @case ('pendente') { toque para capturar }
               @case ('na_fila') { na fila… }
               @case ('enviando') { enviando {{ f.progresso }}% }
-              @case ('enviada') { enviada ✓ }
+              @case ('enviada') { enviada ✓ (toque para trocar) }
               @case ('falhou') { falhou — toque para reenviar }
             }
           </small>
@@ -41,32 +39,18 @@ export interface FotoAlterada {
       }
     </div>
   `,
-  styles: [
-    `
-      .qp-fotos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--space-2); }
-      .qp-foto-slot {
-        aspect-ratio: 1; border: 1px solid var(--color-divider); display: flex; flex-direction: column;
-        align-items: center; justify-content: center; gap: 4px; font-size: 12px; text-align: center; cursor: pointer; padding: 4px;
-      }
-      .qp-foto-feita { border-color: var(--color-accent); background: var(--color-accent-100); }
-      .qp-foto-erro { border-color: var(--color-neutral-600); border-style: dashed; }
-      .qp-foto-barra { width: 80%; height: 3px; background: var(--color-divider); }
-      .qp-foto-barra > div { height: 100%; background: var(--color-accent); transition: width .2s ease-out; }
-    `,
-  ],
 })
 export class VistoriaFotosComponent {
   fotos = input.required<FotosVistoria>();
-  alterada = output<FotoAlterada>();
+  desabilitado = input(false);
+  escolhida = output<FotoEscolhida>();
 
   slots = FOTOS_OBRIGATORIAS;
-  private queue = inject(UploadQueueService);
 
   escolher(chave: FotoChave, ev: Event): void {
     const input = ev.target as HTMLInputElement;
     const arquivo = input.files?.[0];
     input.value = '';
-    if (!arquivo) return;
-    void this.queue.enfileirar(arquivo, (patch) => this.alterada.emit({ chave, patch }));
+    if (arquivo) this.escolhida.emit({ chave, arquivo });
   }
 }

@@ -1,15 +1,15 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { CatalogService } from '../../core/services/catalog.service';
 import { AppConfigService } from '../../core/config/app-config.service';
-import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
 import { PricingService } from '../../core/services/pricing.service';
 import { DatePickerModule } from 'primeng/datepicker';
-import { Protecao } from '../../core/models/domain.models';
+import { Protecao, Valores } from '../../core/models/domain.models';
+import { mensagemErro } from '../../core/api/api.service';
 import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame.component';
 import { BackButtonComponent } from '../../shared/components/back-button.component';
 import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
@@ -75,7 +75,11 @@ import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
       <p class="text-muted" style="font-size: 12px;">
         Você só paga depois que o proprietário aprovar. Sem verificação de identidade, as datas ficam reservadas por {{ holdKycMin }} minutos.
       </p>
-      <button class="btn btn-primary btn-block" (click)="solicitar(v.id, v.diaria)">Confirmar reserva</button>
+      <div class="field" style="margin-bottom: var(--space-3);">
+        <label>Finalidade da locação (opcional, o proprietário vê)</label>
+        <input type="text" class="p-inputtext" [ngModel]="finalidade()" (ngModelChange)="finalidade.set($event)" name="finalidade" maxlength="120" placeholder="Ex.: viagem de trabalho" />
+      </div>
+      <button class="btn btn-primary btn-block" [disabled]="enviando() || !cotacaoOk()" (click)="solicitar(v.id)">{{ enviando() ? 'Enviando…' : 'Confirmar reserva' }}</button>
     }
   `,
   styles: [
@@ -95,39 +99,61 @@ export class ReservaComponent {
   erro = signal('');
   holdKycMin = inject(AppConfigService).get('HOLD_KYC_MINUTOS');
   private booking = inject(BookingService);
-  private auth = inject(AuthService);
 
   veiculo = computed(() => this.catalog.porId(this.id().get('id') ?? ''));
 
   inicio = signal(this.catalog.filtros().inicio);
   fim = signal(this.catalog.filtros().fim);
   protecao = signal<Protecao>('completa');
+  finalidade = signal('');
+  enviando = signal(false);
+  cotacaoOk = signal(false);
 
-  valores = computed(() => {
-    const v = this.veiculo();
-    if (!v) return this.pricing.calcular(0, 'completa', this.inicio(), this.fim());
-    return this.pricing.calcular(v.diaria, this.protecao(), this.inicio(), this.fim());
-  });
+  /** Valores calculados pelo servidor (fonte única de preço); zerados até a primeira cotação. */
+  valores = signal<Valores>({ diaria: 0, dias: 0, subtotal: 0, protecao: 0, taxa: 0, total: 0, repasse: 0, caucao: 0 });
+
+  constructor() {
+    void this.catalog.carregar(this.id().get('id') ?? '');
+    // Recota sempre que o período ou a proteção mudam.
+    effect(() => {
+      const id = this.id().get('id') ?? '';
+      const [i, f, p] = [this.inicio(), this.fim(), this.protecao()];
+      untracked(async () => {
+        try {
+          this.valores.set(await this.catalog.cotar(id, i, f, p));
+          this.cotacaoOk.set(true);
+          this.erro.set('');
+        } catch (e) {
+          this.cotacaoOk.set(false);
+          this.erro.set(mensagemErro(e));
+        }
+      });
+    });
+  }
 
   /** Cria a solicitação (RF12). Sem KYC aprovado → reserva retida e redirecionamento ao KYC (BDD 9.1). */
-  solicitar(veiculoId: string, diaria: number): void {
+  async solicitar(veiculoId: string): Promise<void> {
     this.erro.set('');
+    this.enviando.set(true);
     try {
-      const r = this.booking.solicitar({
+      const r = await this.booking.solicitar({
         veiculoId,
-        locatarioId: this.auth.conta().id,
         inicio: this.inicio(),
         fim: this.fim(),
         protecao: this.protecao(),
-        diaria,
+        finalidade: this.finalidade().trim() || undefined,
+        origem: this.catalog.origemSolicitacao(),
       });
+      this.catalog.origemSolicitacao.set('busca');
       if (r.status === 'aguardando_kyc') {
         this.router.navigate(['/verificacao'], { queryParams: { reserva: r.id } });
       } else {
         this.router.navigate(['/reserva', r.id, 'confirmado']);
       }
     } catch (e) {
-      this.erro.set((e as Error).message);
+      this.erro.set(mensagemErro(e));
+    } finally {
+      this.enviando.set(false);
     }
   }
 

@@ -1,16 +1,13 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { InputTextModule } from 'primeng/inputtext';
 import { LucideAngularModule, Mail, Lock } from 'lucide-angular';
+import { AuthService } from '../../core/services/auth.service';
+import { mensagemErro } from '../../core/api/api.service';
 
-/**
- * Tela de entrada (`/entrar`). Autenticação real (senha, sessão, JWT) está
- * fora do escopo do protótipo de design — aqui simulamos o fluxo apenas
- * navegando para a busca, já que o AuthService mantém uma conta única em
- * memória.
- */
+/** Tela de entrada (`/entrar`): login real na API (e-mail + senha → token de sessão). */
 @Component({
   selector: 'qp-welcome',
   standalone: true,
@@ -53,7 +50,13 @@ import { LucideAngularModule, Mail, Lock } from 'lucide-angular';
                 <input id="senha" pInputText type="password" [(ngModel)]="senha" name="senha" required />
               </div>
             </div>
-            <button class="btn btn-primary btn-block" type="submit">Entrar</button>
+            @if (expirou) {
+              <p class="text-muted" style="font-size: 13px; margin: 0;">Sua sessão expirou. Entre novamente.</p>
+            }
+            @if (erro()) {
+              <p role="alert" style="font-size: 13px; margin: 0; color: var(--color-danger, #b3261e);">{{ erro() }}</p>
+            }
+            <button class="btn btn-primary btn-block" type="submit" [disabled]="enviando()">{{ enviando() ? 'Entrando…' : 'Entrar' }}</button>
           </form>
 
           <p class="text-muted" style="font-size: 13px; text-align: center;">
@@ -121,10 +124,25 @@ export class WelcomeComponent {
 
   email = '';
   senha = '';
+  erro = signal('');
+  enviando = signal(false);
+  expirou = !!inject(ActivatedRoute).snapshot.queryParamMap.get('expirou');
+  private next = inject(ActivatedRoute).snapshot.queryParamMap.get('next');
 
-  constructor(private router: Router) {}
+  constructor(private auth: AuthService, private router: Router) {}
 
-  entrar(): void {
-    this.router.navigate(['/buscar']);
+  async entrar(): Promise<void> {
+    this.erro.set('');
+    this.enviando.set(true);
+    try {
+      await this.auth.entrar(this.email, this.senha);
+      void this.auth.iniciarSessao();
+      // Só segue para `next` se for rota interna (evita redirecionamento aberto).
+      await this.router.navigateByUrl(this.next && this.next.startsWith('/') && !this.next.startsWith('//') ? this.next : this.auth.rotaInicial());
+    } catch (e) {
+      this.erro.set(mensagemErro(e));
+    } finally {
+      this.enviando.set(false);
+    }
   }
 }

@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { CatalogService } from '../../core/services/catalog.service';
 import { OwnerService } from '../../core/services/owner.service';
+import { urlImagem } from '../../core/api/api.config';
 import { PayoutService } from '../../core/services/payout.service';
 import { PricingService } from '../../core/services/pricing.service';
 import { TagComponent } from '../../shared/components/tag.component';
@@ -51,7 +52,7 @@ import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame
       </div>
       <div class="card">
         <span class="card-kicker">Avaliação</span>
-        <span class="card-title">★ {{ auth.conta().nota }}</span>
+        <span class="card-title">★ {{ owner.painel()?.reputacao?.media ?? auth.conta().nota }}</span>
       </div>
       <div class="card">
         <span class="card-kicker">Diárias no mês</span>
@@ -74,29 +75,31 @@ import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame
     </div>
   `,
 })
-export class PainelComponent {
+export class PainelComponent implements OnInit {
+  img = urlImagem;
+
   constructor(
     public auth: AuthService,
     private catalog: CatalogService,
-    private owner: OwnerService,
+    public owner: OwnerService,
     public payout: PayoutService,
     public pricing: PricingService,
-    private router: Router,
   ) {}
 
-  meusVeiculos = computed(() => this.catalog.doProprietario(this.auth.conta().id));
+  ngOnInit(): void {
+    void Promise.all([this.catalog.carregarMeus(), this.owner.carregarSolicitacoes(), this.payout.carregar(), this.owner.carregarPainel()]).catch(() => undefined);
+  }
+
+  meusVeiculos = computed(() => this.catalog.meusVeiculos());
   veiculosAtivos = computed(() => this.meusVeiculos().filter((v) => v.status === 'Aprovado'));
   pendentes = computed(() => this.owner.solicitacoesPendentes());
-  pagos = computed(() => this.payout.repasses().filter((r) => r.status === 'Pago'));
+  pagos = computed(() => this.payout.pagos());
 
   taxaAceite = computed(() => {
-    const todas = this.owner.solicitacoes();
-    if (todas.length === 0) return 100;
-    const aceitas = todas.filter((s) => s.status === 'aceita').length;
-    return Math.round((aceitas / todas.length) * 100);
+    const respondidas = this.owner.solicitacoes().filter((s) => s.status !== 'pendente');
+    if (respondidas.length === 0) return 100;
+    return Math.round((respondidas.filter((s) => s.status === 'aceita').length / respondidas.length) * 100);
   });
 
-  diariasNoMes = computed(() =>
-    this.meusVeiculos().reduce((total, v) => total + v.locacoes, 0),
-  );
+  diariasNoMes = computed(() => this.meusVeiculos().reduce((total, v) => total + v.locacoes, 0));
 }

@@ -1,125 +1,185 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { AcquisitionAttribution, Conta, Kyc, Papel, StatusKyc } from '../models/domain.models';
-import { KycProvider } from '../adapters/kyc.provider';
-import { EventBusService } from '../analytics/event-bus.service';
+import { ApiService } from '../api/api.service';
+import { mapConta } from '../api/mappers';
+import { SessaoStore } from '../api/sessao.store';
+import { CanalNotificacao, Conta, FinalidadeConsentimento, Papel, StatusKyc } from '../models/domain.models';
 import { AttributionService } from './attribution.service';
-import { AuditService } from './audit.service';
-import { ClockService } from './clock.service';
-import { SchedulerService } from './scheduler.service';
 import { ReferralService } from './referral.service';
 
+type ItemKyc = 'doc' | 'cnh' | 'selfie' | 'banco';
+
+const CONTA_VAZIA: Conta = {
+  id: '',
+  nome: '',
+  email: '',
+  cpf: '',
+  papeis: [],
+  admin: false,
+  kyc: { doc: false, cnh: false, selfie: false, banco: false, aprovado: false },
+  nota: 0,
+  cnhAnos: 0,
+  membroDesde: '2000-01',
+  validadeCnh: '',
+  origem: null,
+  consentimentos: {
+    push: { marketing: false, transacional: true },
+    email: { marketing: false, transacional: true },
+    sms: { marketing: false, transacional: true },
+  },
+};
+
 /**
- * Conta e sessão do usuário: cadastro, papel ativo (locatário/proprietário)
- * e KYC (RF02). O provedor de KYC é um adapter (KycProvider). Em produção isto
- * conversa com um serviço de identidade/JWT — aqui mantemos o estado em
- * memória via signals.
+ * Conta, sessão e KYC, tudo contra a API. O token fica em `SessaoStore`; papéis (locatário e/ou
+ * proprietário) e o status do KYC vêm do servidor. Contas admin só existem no banco: não há
+ * cadastro nem promoção a ADMIN pela interface.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private provider = inject(KycProvider);
-  private bus = inject(EventBusService);
+  private api = inject(ApiService);
+  private sessao = inject(SessaoStore);
   private attribution = inject(AttributionService);
-  private audit = inject(AuditService);
-  private clock = inject(ClockService);
   private referral = inject(ReferralService);
 
-  private readonly _conta = signal<Conta>({
-    id: 'u1',
-    nome: 'Mariana Souza',
-    email: 'mariana.souza@example.com',
-    cpf: '',
-    papel: 'locatario',
-    kyc: { doc: false, cnh: false, selfie: false, banco: false, aprovado: false },
-    nota: 4.8,
-    cnhAnos: 6,
-    membroDesde: '2025-03-01',
-    validadeCnh: '',
-    origem: null,
-  });
+  private readonly _conta = signal<Conta | null>(null);
   private readonly _statusKyc = signal<StatusKyc>('PENDENTE');
-  private kycIniciadoEm: number | null = null;
 
-  readonly conta = this._conta.asReadonly();
+  /** Conta logada (ou uma conta vazia enquanto ninguém entrou — use `logado()` para distinguir). */
+  readonly conta = computed(() => this._conta() ?? CONTA_VAZIA);
+  readonly logado = computed(() => this._conta() !== null);
+  readonly admin = computed(() => this._conta()?.admin ?? false);
   readonly statusKyc = this._statusKyc.asReadonly();
-  readonly papelAtivo = computed(() => this._conta().papel);
+
+  /** Papel em uso agora (um usuário pode ter os dois e alternar). */
+  readonly papelAtivo = computed<Papel>(() => {
+    const papeis = this.conta().papeis;
+    const salvo = this.sessao.papelAtivo();
+    if (salvo && papeis.includes(salvo)) return salvo;
+    return papeis[0] ?? 'locatario';
+  });
 
   readonly itensKycConcluidos = computed(() => {
-    const { doc, cnh, selfie, banco } = this._conta().kyc;
+    const { doc, cnh, selfie, banco } = this.conta().kyc;
     return [doc, cnh, selfie, banco].filter(Boolean).length;
   });
 
   /** Só `APROVADO` libera reservar/publicar (RF02). */
   readonly contaVerificada = computed(() => this._statusKyc() === 'APROVADO');
 
-  constructor() {
-    inject(SchedulerService).registrar('kyc-expiracao', () => this.verificarExpiracao());
+  temPapel(p: Papel): boolean {
+    return this.conta().papeis.includes(p);
   }
 
-  cadastrar(dados: { nome: string; email: string; cpf: string; papel: Papel }): void {
-    const jaTinhaOrigem = this._conta().origem !== null;
-    // First-touch imutável: só grava se ainda não existe (RF08).
-    const origem: AcquisitionAttribution | null = jaTinhaOrigem ? this._conta().origem : this.attribution.paraCadastro();
-    this._conta.update((c) => ({ ...c, ...dados, origem }));
-    if (!jaTinhaOrigem && origem) {
-      // Indicação: autoindicação (mesmo usuário/dispositivo/documento) não é registrada.
-      if (origem.referral_code) {
-        this.referral.registrarCadastro(origem.referral_code, { id: this._conta().id, cpf: dados.cpf, dispositivo: this.referral.dispositivoAtual() });
-      }
-      this.bus.emitir('cadastro_concluido', {
-        user_id: this._conta().id,
-        canal_origem: origem.canal,
-        utm_source: origem.utm_source,
-        utm_medium: origem.utm_medium,
-        utm_campaign: origem.utm_campaign,
-        referral_code: origem.referral_code,
-      });
+  /** Para onde levar o usuário logo após entrar. */
+  rotaInicial(): string {
+    if (this.admin()) return '/admin/veiculos';
+    return this.papelAtivo() === 'proprietario' ? '/proprietario' : '/buscar';
+  }
+
+  // ───────────── sessão ─────────────
+
+  private aplicar(raw: any): void {
+    this._conta.set(mapConta(raw));
+    this._statusKyc.set(raw.statusKyc as StatusKyc);
+    const c = this._conta()!;
+    if (!c.papeis.includes(this.sessao.papelAtivo() as Papel)) this.sessao.definirPapel(c.papeis[0] ?? null);
+  }
+
+  /** Recarrega a conta no servidor (status do KYC, nota, papéis…). */
+  async atualizar(): Promise<void> {
+    this.aplicar(await this.api.get('/me'));
+  }
+
+  /** No início do app: retoma a sessão salva, se o token ainda valer. */
+  async restaurar(): Promise<void> {
+    if (!this.sessao.token) return;
+    try {
+      await this.atualizar();
+      void this.iniciarSessao();
+    } catch {
+      this.sessao.definirToken(null);
+      this.sessao.definirPapel(null);
     }
   }
+
+  async entrar(email: string, senha: string): Promise<void> {
+    const origem = new URLSearchParams(globalThis.location?.search ?? '').get('origem');
+    const r = await this.api.post<{ token: string; usuario: unknown }>('/auth/login', { email, senha, origem });
+    this.sessao.definirToken(r.token);
+    this.sessao.definirPapel(null);
+    this.aplicar(r.usuario);
+  }
+
+  async cadastrar(d: { nome: string; email: string; cpf: string; senha: string; papeis: Papel[]; cnhAnos: number }): Promise<void> {
+    const a = this.attribution.paraCadastro();
+    const r = await this.api.post<{ token: string; usuario: unknown }>('/auth/cadastro', {
+      nome: d.nome,
+      email: d.email,
+      cpf: d.cpf,
+      senha: d.senha,
+      papeis: d.papeis.map((p) => p.toUpperCase()),
+      cnhAnos: d.cnhAnos,
+      dispositivo: this.referral.dispositivoAtual(),
+      atribuicao: { utmSource: a.utm_source, utmMedium: a.utm_medium, utmCampaign: a.utm_campaign, utmTerm: a.utm_term, utmContent: a.utm_content, ref: a.referral_code, referrer: globalThis.document?.referrer || null },
+    });
+    this.sessao.definirToken(r.token);
+    this.sessao.definirPapel(d.papeis[0]);
+    this.aplicar(r.usuario);
+  }
+
+  async sair(): Promise<void> {
+    try {
+      await this.api.post('/auth/logout');
+    } catch {
+      /* já inválida no servidor */
+    }
+    this.sessao.definirToken(null);
+    this.sessao.definirPapel(null);
+    this._conta.set(null);
+    this._statusKyc.set('PENDENTE');
+  }
+
+  /** Início de sessão do app (retorno espontâneo x notificado — RF15). */
+  async iniciarSessao(): Promise<void> {
+    const q = new URLSearchParams(globalThis.location?.search ?? '');
+    try {
+      await this.api.post('/me/sessao', { origem: q.get('origem') ?? undefined, notificacaoId: q.get('notificacao_id') ?? undefined });
+    } catch {
+      /* métrica não deve quebrar o app */
+    }
+  }
+
+  // ───────────── papéis ─────────────
 
   alternarPapel(papel: Papel): void {
-    this._conta.update((c) => ({ ...c, papel }));
-    this.bus.atualizarContexto({ userId: this._conta().id, papel });
+    if (this.temPapel(papel)) this.sessao.definirPapel(papel);
   }
 
-  enviarItemKyc(item: keyof Kyc): void {
-    if (item === 'aprovado') return;
-    const antes = this._statusKyc();
-    this._conta.update((c) => ({ ...c, kyc: { ...c.kyc, [item]: true } }));
-    if (antes === 'PENDENTE' || antes === 'REPROVADO' || antes === 'EXPIRADO') {
-      this.mudarStatus('EM_ANALISE');
-      this.kycIniciadoEm = Date.now();
-      this.bus.emitir('kyc_iniciado', { user_id: this._conta().id, tipo_usuario: this._conta().papel });
+  /** Define quais papéis a própria conta usa (pode ser os dois). */
+  async definirPapeis(papeis: Papel[]): Promise<void> {
+    this.aplicar(await this.api.put('/me/papeis', { papeis: papeis.map((p) => p.toUpperCase()) }));
+  }
+
+  // ───────────── KYC ─────────────
+
+  /** Envia o arquivo de um item do KYC; com os 4 itens a análise é concluída no servidor. */
+  async enviarItemKyc(item: ItemKyc, arquivo: Blob): Promise<void> {
+    this.aplicar(await this.api.upload(`/me/kyc/${item.toUpperCase()}`, { arquivos: { arquivo } }));
+  }
+
+  /** true se o KYC está aprovado e não expirou (consulta o servidor). */
+  async verificarExpiracao(): Promise<boolean> {
+    if (!this.logado()) return false;
+    try {
+      await this.atualizar();
+    } catch {
+      /* usa o último estado conhecido */
     }
-    if (this.itensKycConcluidos() === 4) void this.concluirAnalise();
+    return this.contaVerificada();
   }
 
-  /** Retorna true se o KYC está aprovado e a CNH ainda é válida; marca EXPIRADO caso contrário. */
-  verificarExpiracao(): boolean {
-    const c = this._conta();
-    if (this._statusKyc() === 'APROVADO' && c.validadeCnh && this.clock.passou(c.validadeCnh + 'T23:59:59')) {
-      this._conta.update((x) => ({ ...x, kyc: { ...x.kyc, aprovado: false } }));
-      this.mudarStatus('EXPIRADO');
-    }
-    return this._statusKyc() === 'APROVADO';
-  }
+  // ───────────── consentimento (RNF03) ─────────────
 
-  private async concluirAnalise(): Promise<void> {
-    const resultado = await this.provider.analisar(this._conta().id, this._conta().kyc);
-    const tempo = Math.round((Date.now() - (this.kycIniciadoEm ?? Date.now())) / 1000);
-    if (resultado.status === 'APROVADO') {
-      this._conta.update((c) => ({ ...c, validadeCnh: resultado.validadeCnh, kyc: { ...c.kyc, aprovado: true } }));
-      this.mudarStatus('APROVADO');
-      this.bus.emitir('kyc_aprovado', { user_id: this._conta().id, tempo_analise_sec: tempo, tipo_usuario: this._conta().papel });
-    } else {
-      this.mudarStatus('REPROVADO');
-      this.bus.emitir('kyc_reprovado', { user_id: this._conta().id, tipo_usuario: this._conta().papel });
-    }
-  }
-
-  private mudarStatus(para: StatusKyc): void {
-    const de = this._statusKyc();
-    if (de === para) return;
-    this._statusKyc.set(para);
-    this.audit.registrar({ entidade: 'kyc', entidadeId: this._conta().id, de, para, ator: this._conta().id });
+  async definirConsentimento(canal: CanalNotificacao, finalidade: FinalidadeConsentimento, valor: boolean): Promise<void> {
+    this.aplicar(await this.api.put('/me/consentimentos', { canal: canal.toUpperCase(), finalidade: finalidade.toUpperCase(), valor }));
   }
 }

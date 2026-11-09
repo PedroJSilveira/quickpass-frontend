@@ -1,37 +1,21 @@
-import { Injectable } from '@angular/core';
-import { Protecao, Valores } from '../models/domain.models';
+import { Injectable, inject } from '@angular/core';
+import { AppConfigService } from '../config/app-config.service';
 
 /**
- * PricingService é a fonte única da verdade para todos os cálculos
- * financeiros da plataforma (ver README, seção "Regras de negócio").
- *
- * Parâmetros hoje fixos como constantes; em produção devem vir de uma
- * configuração por whitelabel/tenant (mesmo espírito do parâmetro `props`
- * do protótipo original).
+ * Apresentação de valores e preços tabelados. O CÁLCULO da locação (diárias, proteção, taxa,
+ * total, caução) é do backend (`GET /api/veiculos/{id}/cotacao`); aqui só formatação e os preços
+ * que a interface exibe, vindos de `AppConfigService`.
  */
 @Injectable({ providedIn: 'root' })
 export class PricingService {
-  /** Percentual retido pela plataforma sobre o subtotal da locação. */
-  readonly taxaPct = 15;
+  private config = inject(AppConfigService);
 
-  /** Caução pré-autorizada no cartão (não é receita, liberada no check-out). */
-  readonly caucao = 500;
-
-  /** Preço da proteção básica, por dia. */
-  readonly precoProtecaoBasica = 25;
-
-  /** Preço da proteção completa, por dia. */
-  readonly precoProtecaoCompleta = 45;
-
-  /** Franquia da proteção básica, informativo para a UI. */
-  readonly franquiaBasica = 3000;
-
-  /** Franquia da proteção completa, informativo para a UI. */
-  readonly franquiaCompleta = 800;
-
-  precoProtecao(protecao: Protecao): number {
-    return protecao === 'basica' ? this.precoProtecaoBasica : this.precoProtecaoCompleta;
-  }
+  get taxaPct(): number { return this.config.precos().taxaPct; }
+  get caucao(): number { return this.config.precos().caucao; }
+  get precoProtecaoBasica(): number { return this.config.precos().protecaoBasicaDia; }
+  get precoProtecaoCompleta(): number { return this.config.precos().protecaoCompletaDia; }
+  get franquiaBasica(): number { return this.config.precos().franquiaBasica; }
+  get franquiaCompleta(): number { return this.config.precos().franquiaCompleta; }
 
   /** Número de diárias entre duas datas ISO, sempre >= 1. */
   dias(inicio: string, fim: string): number {
@@ -39,39 +23,9 @@ export class PricingService {
     return d > 0 ? d : 1;
   }
 
-  /**
-   * Calcula o detalhamento de valores de uma locação.
-   *
-   * - A taxa incide somente sobre o subtotal da locação (não sobre a proteção).
-   * - A proteção é receita da plataforma (cobre a apólice contratada).
-   * - A caução é pré-autorização no cartão: não entra no total nem em receita.
-   */
-  calcular(diaria: number, protecao: Protecao, inicio: string, fim: string): Valores {
-    const dias = this.dias(inicio, fim);
-    const subtotal = diaria * dias;
-    const protecaoValor = this.precoProtecao(protecao) * dias;
-    const taxa = subtotal * (this.taxaPct / 100);
-    const total = subtotal + protecaoValor; // cobrado do locatário
-    const repasse = subtotal - taxa; // pago ao proprietário
-
-    return {
-      diaria,
-      dias,
-      subtotal,
-      protecao: protecaoValor,
-      taxa,
-      total,
-      repasse,
-      caucao: this.caucao,
-    };
-  }
-
   /** Formata em BRL com 2 casas decimais (pt-BR). */
   money(valor: number): string {
-    return 'R$ ' + Number(valor || 0).toLocaleString('pt-BR', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+    return 'R$ ' + Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   /** Formata valores agregados (ganhos, projeções) arredondados, sem centavos. */

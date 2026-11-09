@@ -34,12 +34,18 @@ export interface Kyc {
   aprovado: boolean;
 }
 
+export type CanalNotificacao = 'push' | 'email' | 'sms';
+export type FinalidadeConsentimento = 'marketing' | 'transacional';
+export type Consentimentos = Record<CanalNotificacao, Record<FinalidadeConsentimento, boolean>>;
+
 export interface Conta {
   id: string;
   nome: string;
   email: string;
   cpf: string;
-  papel: Papel;
+  /** Papéis de uso (locatário e/ou proprietário). Contas admin só nascem direto no banco. */
+  papeis: Papel[];
+  admin: boolean;
   kyc: Kyc;
   nota: number;
   cnhAnos: number;
@@ -48,6 +54,7 @@ export interface Conta {
   validadeCnh: string;
   /** Origem de aquisição, first-touch e imutável (RF08). */
   origem: AcquisitionAttribution | null;
+  consentimentos: Consentimentos;
 }
 
 export type CategoriaVeiculo = 'Hatch' | 'Sedã' | 'SUV' | 'Híbrido' | 'Elétrico';
@@ -64,16 +71,19 @@ export interface Veiculo {
   id: string;
   titulo: string;
   foto: string;
+  /** Todas as fotos do anúncio (URLs; a primeira é a capa). */
+  fotos: string[];
   marca: string;
   modelo: string;
   ano: number;
-  placa: string;
+  /** Só presente na visão do proprietário/admin. */
+  placa?: string;
   categoria: CategoriaVeiculo;
   diaria: number;
   /** Localização APROXIMADA (bairro) — única exibida em busca/público (RNF02). */
   local: string;
   /** Endereço exato: só revelado após KYC aprovado e pagamento confirmado (RNF02). */
-  enderecoExato: string;
+  enderecoExato?: string;
   distanciaKm: number;
   cambio: Cambio;
   combustivel: Combustivel;
@@ -84,6 +94,7 @@ export interface Veiculo {
   proprietarioNome: string;
   proprietarioIniciais: string;
   proprietarioNota: number;
+  motivoRecusa?: string | null;
   status: StatusVeiculo;
   nota: number | null;
   locacoes: number;
@@ -151,6 +162,13 @@ export interface Reserva {
   aprovacaoExpiraEm: string | null;
   /** Janela de caução/disputa começa no check-out. */
   checkoutEm: string | null;
+  /** Dados de apoio às listas (vêm junto da reserva). */
+  veiculoTitulo: string;
+  veiculoFoto: string;
+  proprietarioId: string;
+  locatarioNome: string;
+  disputaId: string | null;
+  disputaStatus: StatusDisputa | null;
 }
 
 /** As 7 fotos obrigatórias de cada vistoria (RF03). */
@@ -167,6 +185,8 @@ export type StatusUpload = 'pendente' | 'na_fila' | 'enviando' | 'enviada' | 'fa
 
 export interface FotoVistoria {
   status: StatusUpload;
+  /** Arquivo já recebido pelo servidor (baixável pelas partes). */
+  arquivoId: string | null;
   /** 0..100 */
   progresso: number;
   tentativas: number;
@@ -196,7 +216,8 @@ export interface Solicitacao {
   id: string;
   reservaId: string;
   veiculoId: string;
-  locatario: { nome: string; idade: number; cnhAnos: number; nota: number; locacoes: number };
+  veiculoTitulo: string;
+  locatario: { nome: string; cnhAnos: number; nota: number; locacoes: number };
   inicio: string;
   fim: string;
   diaria: number;
@@ -255,6 +276,14 @@ export interface DepositHold {
   liberarEm: string | null;
 }
 
+/** Arquivo enviado (foto/evidência); `url` é relativa à API. */
+export interface ArquivoRef {
+  id: string;
+  nome: string;
+  contentType: string;
+  url: string;
+}
+
 /** Estados da disputa (§4.4). */
 export type StatusDisputa =
   | 'ABERTA'
@@ -279,8 +308,8 @@ export interface Dispute {
   reservaId: string;
   status: StatusDisputa;
   /** DamageReport do proprietário. */
-  avaria: { descricao: string; qtdFotos: number; informadaEm: string; valorEstimado: number };
-  contestacao: { texto: string; qtdEvidencias: number; enviadaEm: string } | null;
+  avaria: { descricao: string; qtdFotos: number; informadaEm: string; valorEstimado: number; fotos: ArquivoRef[] };
+  contestacao: { texto: string; qtdEvidencias: number; enviadaEm: string; evidencias: ArquivoRef[] } | null;
   contestarAte: string;
   decisao: DecisaoDisputa | null;
 }
@@ -303,18 +332,6 @@ export interface Payment {
   pagoEm: string | null;
 }
 
-/** Registro de auditoria (RNF02): quem, quando, de/para. */
-export interface AuditEntry {
-  entidade: 'reserva' | 'caucao' | 'disputa' | 'pagamento' | 'kyc';
-  entidadeId: string;
-  de: string | null;
-  para: string;
-  ator: string;
-  em: string;
-  motivo?: string;
-}
-
-export type CanalNotificacao = 'push' | 'email' | 'sms';
 export type TipoNotificacao = 'revisao_agenda' | 'demanda_local' | 'radar' | 'avaria_informada';
 
 /** Notificação enviada, com o dado que a justificou (RNF03). */

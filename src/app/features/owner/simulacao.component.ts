@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { CatalogService } from '../../core/services/catalog.service';
 import { PricingService } from '../../core/services/pricing.service';
-import { RevenueSimulationService } from '../../core/services/revenue-simulation.service';
+import { mensagemErro } from '../../core/api/api.service';
+import { RevenueSimulationService, SimulacaoReceita } from '../../core/services/revenue-simulation.service';
 import { BackButtonComponent } from '../../shared/components/back-button.component';
 import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame.component';
 
@@ -50,7 +51,7 @@ import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame
         <div class="card"><span class="card-kicker">Valor efetivamente recebido</span><span class="card-title">{{ pricing.money(s.valorRecebido) }}</span></div>
       </div>
     } @else {
-      <p>Veículo não encontrado.</p>
+      <p>{{ erro() || 'Carregando…' }}</p>
     }
   `,
 })
@@ -61,6 +62,21 @@ export class SimulacaoComponent {
   pricing = inject(PricingService);
   private id = toSignal(this.route.paramMap, { requireSync: true });
 
-  veiculo = computed(() => this.catalog.porId(this.id().get('id') ?? ''));
-  sim = computed(() => this.service.simular(this.id().get('id') ?? ''));
+  veiculo = () => this.catalog.porId(this.id().get('id') ?? '');
+  sim = signal<SimulacaoReceita | null>(null);
+  erro = signal('');
+
+  constructor() {
+    effect(() => {
+      const id = this.id().get('id') ?? '';
+      untracked(async () => {
+        try {
+          await this.catalog.carregarMeus();
+          this.sim.set(await this.service.simular(id));
+        } catch (e) {
+          this.erro.set(mensagemErro(e));
+        }
+      });
+    });
+  }
 }

@@ -1,12 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ReferralService } from '../../core/services/referral.service';
-import { CanalNotificacao, ConsentService } from '../../core/services/consent.service';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
-import { Papel } from '../../core/models/domain.models';
-import { SegControlComponent, SegOption } from '../../shared/components/seg-control.component';
+import { CanalNotificacao, Papel } from '../../core/models/domain.models';
+import { mensagemErro } from '../../core/api/api.service';
 
 interface ItemPerfil {
   titulo: string;
@@ -17,7 +16,7 @@ interface ItemPerfil {
 @Component({
   selector: 'qp-perfil',
   standalone: true,
-  imports: [CommonModule, SegControlComponent],
+  imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="qp-screen-kicker">Conta</div>
@@ -28,17 +27,32 @@ interface ItemPerfil {
       <div class="qp-stack" style="gap: 2px;">
         <strong>{{ auth.conta().nome }}</strong>
         <span class="card-meta">
-          ★ {{ auth.conta().nota }} · membro desde {{ membroDesdeFmt() }} ·
+          ★ {{ auth.conta().nota }} · {{ auth.admin() ? 'administrador · ' : '' }}membro desde {{ membroDesdeFmt() }} ·
           {{ auth.contaVerificada() ? 'Verificado' : 'Verificação pendente' }}
         </span>
       </div>
     </div>
 
-    <qp-seg-control
-      [options]="papelOptions"
-      [value]="auth.papelAtivo()"
-      (valueChange)="trocarPapel($event)"
-    />
+    @if (!auth.admin()) {
+      <div class="card" style="margin-bottom: var(--space-4);">
+        <span class="card-kicker">Como você usa a QuickPass</span>
+        <p class="text-muted" style="font-size: 12px; margin: 4px 0 8px;">Sua conta pode ser de locatário, de proprietário ou dos dois ao mesmo tempo.</p>
+        <label class="qp-row" style="gap: var(--space-2);">
+          <input type="checkbox" [checked]="auth.temPapel('locatario')" (change)="alternarPapelConta('locatario', $any($event.target).checked)" />
+          Quero alugar carros (locatário)
+        </label>
+        <label class="qp-row" style="gap: var(--space-2);">
+          <input type="checkbox" [checked]="auth.temPapel('proprietario')" (change)="alternarPapelConta('proprietario', $any($event.target).checked)" />
+          Quero alugar meu carro (proprietário)
+        </label>
+        @if (ativar) {
+          <p class="text-muted" style="font-size: 13px; margin: 8px 0 0;">Para acessar essa área, ative o papel de {{ ativar }} acima.</p>
+        }
+        @if (erro()) {
+          <p style="font-size: 13px; margin: 8px 0 0; color: var(--color-danger, #b3261e);">{{ erro() }}</p>
+        }
+      </div>
+    }
 
     <div class="qp-grid-2x2" style="margin: var(--space-4) 0;">
       <div class="card">
@@ -67,7 +81,7 @@ interface ItemPerfil {
       @if (link()) {
         <code style="word-break: break-all;">{{ link() }}</code>
       } @else {
-        <button class="btn btn-secondary" (click)="gerarLink()">Gerar meu link</button>
+        <button class="btn btn-secondary" (click)="gerarLink()" [disabled]="!auth.logado()">Gerar meu link</button>
       }
     </div>
 
@@ -78,7 +92,7 @@ interface ItemPerfil {
       </p>
       @for (canal of canais; track canal) {
         <label class="qp-row" style="gap: var(--space-2);">
-          <input type="checkbox" [checked]="consent.consentimentos()[canal].marketing" (change)="consent.definir(canal, 'marketing', $any($event.target).checked)" />
+          <input type="checkbox" [checked]="auth.conta().consentimentos[canal].marketing" (change)="definirConsentimento(canal, $any($event.target).checked)" />
           Marketing por {{ canal }}
         </label>
       }
@@ -102,29 +116,33 @@ interface ItemPerfil {
     `,
   ],
 })
-export class PerfilComponent {
-  consent = inject(ConsentService);
+export class PerfilComponent implements OnInit {
   private referral = inject(ReferralService);
   link = signal('');
+  erro = signal('');
+  ativar = inject(ActivatedRoute).snapshot.queryParamMap.get('ativar');
 
-  gerarLink(): void {
-    this.link.set(this.referral.gerarLink(this.auth.conta().id, { cpf: this.auth.conta().cpf || undefined }).url);
+  async gerarLink(): Promise<void> {
+    try {
+      this.link.set((await this.referral.gerarLink()).url);
+    } catch (e) {
+      this.erro.set(mensagemErro(e));
+    }
   }
 
   canais: CanalNotificacao[] = ['push', 'email', 'sms'];
 
-  papelOptions: SegOption<Papel>[] = [
-    { label: 'Locatário', value: 'locatario' },
-    { label: 'Proprietário', value: 'proprietario' },
-  ];
-
   itens: ItemPerfil[] = [
-    { titulo: 'Minhas locações', meta: '', ir: () => this.router.navigate(['/locacoes']) },
+    { titulo: 'Minhas locações', meta: '', ir: () => this.router.navigate([this.auth.temPapel('locatario') ? '/locacoes' : '/proprietario/reservas']) },
     { titulo: 'Verificação', meta: '', ir: () => this.router.navigate(['/verificacao']) },
     { titulo: 'Dados bancários', meta: '', ir: () => this.router.navigate(['/verificacao']) },
   ];
 
   constructor(public auth: AuthService, private booking: BookingService, private router: Router) {}
+
+  ngOnInit(): void {
+    void this.booking.carregar().catch(() => undefined);
+  }
 
   iniciais = computed(() =>
     this.auth
@@ -141,16 +159,32 @@ export class PerfilComponent {
     return `${meses[Number(mes) - 1]} de ${ano}`;
   });
 
-  totalLocacoes = computed(() =>
-    this.booking.reservas().filter((r) => r.locatarioId === this.auth.conta().id && r.status === 'concluida').length,
-  );
+  totalLocacoes = computed(() => this.booking.reservas().filter((r) => r.status === 'concluida').length);
 
-  cancelamentos = computed(
-    () => this.booking.reservas().filter((r) => r.locatarioId === this.auth.conta().id && ['cancelada', 'rejeitada'].includes(r.status)).length,
-  );
+  cancelamentos = computed(() => this.booking.reservas().filter((r) => ['cancelada', 'rejeitada'].includes(r.status)).length);
 
-  trocarPapel(papel: Papel): void {
-    this.auth.alternarPapel(papel);
-    this.router.navigate([papel === 'locatario' ? '/buscar' : '/proprietario']);
+  /** Liga/desliga um papel da própria conta (a conta precisa manter ao menos um). */
+  async alternarPapelConta(papel: Papel, ligado: boolean): Promise<void> {
+    this.erro.set('');
+    const atuais = this.auth.conta().papeis;
+    const novos = ligado ? [...new Set([...atuais, papel])] : atuais.filter((p) => p !== papel);
+    if (!novos.length) {
+      this.erro.set('Mantenha ao menos um papel ativo.');
+      return;
+    }
+    try {
+      await this.auth.definirPapeis(novos);
+      void this.booking.carregar().catch(() => undefined);
+    } catch (e) {
+      this.erro.set(mensagemErro(e));
+    }
+  }
+
+  async definirConsentimento(canal: CanalNotificacao, valor: boolean): Promise<void> {
+    try {
+      await this.auth.definirConsentimento(canal, 'marketing', valor);
+    } catch (e) {
+      this.erro.set(mensagemErro(e));
+    }
   }
 }

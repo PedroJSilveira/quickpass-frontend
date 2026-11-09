@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -8,6 +8,9 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { SliderModule } from 'primeng/slider';
 import { CatalogService } from '../../core/services/catalog.service';
 import { PricingService } from '../../core/services/pricing.service';
+import { AuthService } from '../../core/services/auth.service';
+import { mensagemErro } from '../../core/api/api.service';
+import { urlImagem } from '../../core/api/api.config';
 import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame.component';
 import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
 
@@ -62,8 +65,12 @@ import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
         <input type="checkbox" [checked]="alertas()" (change)="alertas.set($any($event.target).checked)" />
         Avisar por push quando surgir carro disponível (opcional)
       </label>
-      <button class="btn btn-secondary" (click)="salvarBusca()">{{ salva() ? 'Busca salva ✓' : 'Salvar esta busca' }}</button>
+      <button class="btn btn-secondary" (click)="salvarBusca()" [disabled]="!auth.temPapel('locatario')">{{ salva() ? 'Busca salva ✓' : 'Salvar esta busca' }}</button>
+      <button class="btn btn-primary" (click)="catalog.buscar()">Buscar</button>
     </div>
+    @if (erro()) {
+      <p class="text-muted" style="font-size: 13px;">{{ erro() }}</p>
+    }
 
     <div class="qp-row" style="margin: var(--space-4) 0; flex-wrap: wrap;">
       @for (cat of catalog.categorias; track cat) {
@@ -81,14 +88,18 @@ import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
       {{ catalog.resultados().length }} carros disponíveis · {{ pricing.formatarPeriodo(catalog.filtros().inicio, catalog.filtros().fim) }}
     </p>
 
-    @if (catalog.resultados().length === 0) {
+    @if (catalog.buscando()) {
+      <div class="qp-empty">Buscando…</div>
+    } @else if (catalog.erroBusca()) {
+      <div class="qp-empty">{{ catalog.erroBusca() }}</div>
+    } @else if (catalog.resultados().length === 0) {
       <div class="qp-empty">Nenhum carro encontrado para esses filtros. Tente aumentar o preço máximo ou trocar a categoria.</div>
     } @else {
       <div class="qp-grid-2">
         @for (v of catalog.resultados(); track v.id) {
           <article class="card qp-car-card" (click)="abrir(v.id)">
             <div class="qp-car-card-photo-wrap">
-              <div class="qp-photo qp-car-card-photo" [style.background-image]="'url(' + v.foto + ')'"></div>
+              <div class="qp-photo qp-car-card-photo" [style.background-image]="'url(' + img(v.foto) + ')'"></div>
             </div>
             <div class="qp-stack qp-car-card-body">
               <div class="qp-row-between">
@@ -126,27 +137,42 @@ import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
     `,
   ],
 })
-export class BuscaComponent {
+export class BuscaComponent implements OnInit {
   private saved = inject(SavedSearchService);
   alertas = signal(false);
   salva = signal(false);
+  erro = signal('');
+  img = urlImagem;
 
-  constructor(public catalog: CatalogService, public pricing: PricingService, private router: Router) {}
+  constructor(public catalog: CatalogService, public pricing: PricingService, public auth: AuthService, private router: Router) {}
+
+  ngOnInit(): void {
+    void this.catalog.pesquisar(false);
+  }
 
   /** Salva localização aproximada (bairro/região), período, categoria e preço — nunca coordenadas exatas. */
-  salvarBusca(): void {
+  async salvarBusca(): Promise<void> {
+    if (!this.auth.logado()) {
+      this.router.navigate(['/entrar'], { queryParams: { next: '/buscar' } });
+      return;
+    }
     const f = this.catalog.filtros();
-    this.saved.salvar({
-      regiao: f.local,
-      raioKm: 10,
-      inicio: f.inicio,
-      fim: f.fim,
-      categoria: f.categoria,
-      precoMax: f.precoMax,
-      alertasAtivos: this.alertas(),
-      canalConsentido: this.alertas(),
-    });
-    this.salva.set(true);
+    this.erro.set('');
+    try {
+      await this.saved.salvar({
+        regiao: f.local,
+        raioKm: 10,
+        inicio: f.inicio,
+        fim: f.fim,
+        categoria: f.categoria,
+        precoMax: f.precoMax,
+        alertasAtivos: this.alertas(),
+        canalConsentido: this.alertas(),
+      });
+      this.salva.set(true);
+    } catch (e) {
+      this.erro.set(mensagemErro(e));
+    }
   }
 
   abrir(id: string): void {

@@ -1,22 +1,16 @@
-import { APP_INITIALIZER, ApplicationConfig, importProvidersFrom, inject, provideZoneChangeDetection, Type } from '@angular/core';
+import { APP_INITIALIZER, ApplicationConfig, importProvidersFrom, inject, provideZoneChangeDetection } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { providePrimeNG } from 'primeng/config';
 import { definePreset } from '@primeng/themes';
 import Aura from '@primeng/themes/aura';
-import { LucideAngularModule, Car, Search, ClipboardList, User, LayoutDashboard, CarFront, Inbox, Wallet, ExternalLink, Bell, Bookmark } from 'lucide-angular';
+import { LucideAngularModule, Car, Search, ClipboardList, User, LayoutDashboard, CarFront, Inbox, Wallet, ExternalLink, Bell, Bookmark, ShieldCheck, ClipboardCheck } from 'lucide-angular';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { routes } from './app.routes';
-import { ADAPTER_PROVIDERS } from './core/adapters/adapters.providers';
+import { apiInterceptor } from './core/api/api.interceptor';
+import { AppConfigService } from './core/config/app-config.service';
+import { AuthService } from './core/services/auth.service';
 import { AttributionService } from './core/services/attribution.service';
-import { SchedulerService } from './core/services/scheduler.service';
-import { SessionService } from './core/services/session.service';
-import { DisputeService } from './core/services/dispute.service';
-import { BookingService } from './core/services/booking.service';
-import { ReviewService } from './core/services/review.service';
-import { SavedSearchService } from './core/services/saved-search.service';
-import { SupplyHealthService } from './core/services/supply-health.service';
-import { AgendaReminderService } from './core/services/agenda-reminder.service';
-import { LocalDemandAlertService } from './core/services/local-demand-alert.service';
 
 /**
  * Preset do PrimeNG casado com o design system Industry: cantos sempre retos
@@ -64,22 +58,18 @@ export const appConfig: ApplicationConfig = {
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
     provideAnimationsAsync(),
-    ...ADAPTER_PROVIDERS,
+    provideHttpClient(withInterceptors([apiInterceptor])),
     {
-      // Captura first-touch (RF08), instancia os services com jobs, inicia sessão (RF15) e o agendador.
+      // Captura first-touch (RF08), carrega os parâmetros do servidor e retoma a sessão salva (token).
       provide: APP_INITIALIZER,
       multi: true,
       useFactory: () => {
         const attribution = inject(AttributionService);
-        const session = inject(SessionService);
-        const scheduler = inject(SchedulerService);
-        // Instancia os services que registram jobs no agendador.
-        const servicos: Type<unknown>[] = [BookingService, DisputeService, ReviewService, SavedSearchService, SupplyHealthService, AgendaReminderService, LocalDemandAlertService];
-        servicos.forEach((t) => inject(t));
-        return () => {
+        const config = inject(AppConfigService);
+        const auth = inject(AuthService);
+        return async () => {
           attribution.capturar();
-          session.iniciar();
-          scheduler.iniciar();
+          await Promise.all([config.carregar(), auth.restaurar()]);
         };
       },
     },
@@ -88,7 +78,7 @@ export const appConfig: ApplicationConfig = {
       translation: ptBR,
     }),
     importProvidersFrom(
-      LucideAngularModule.pick({ Car, Search, ClipboardList, User, LayoutDashboard, CarFront, Inbox, Wallet, ExternalLink, Bell, Bookmark }),
+      LucideAngularModule.pick({ Car, Search, ClipboardList, User, LayoutDashboard, CarFront, Inbox, Wallet, ExternalLink, Bell, Bookmark, ShieldCheck, ClipboardCheck }),
     ),
   ],
 };

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -8,6 +8,7 @@ import { CatalogService } from '../../core/services/catalog.service';
 import { AppConfigService } from '../../core/config/app-config.service';
 import { ReviewService } from '../../core/services/review.service';
 import { AuthService } from '../../core/services/auth.service';
+import { mensagemErro } from '../../core/api/api.service';
 import { StarRatingComponent } from '../../shared/components/star-rating.component';
 import { BackButtonComponent } from '../../shared/components/back-button.component';
 import { TextareaModule } from 'primeng/textarea';
@@ -50,13 +51,16 @@ const SELOS_SUGERIDOS = ['Carro limpo', 'Como anunciado', 'Entrega pontual', 'Bo
         A avaliação é opcional e só fica visível quando as duas partes avaliarem ou após {{ prazoHoras }}h.
         Quem não avalia não é penalizado.
       </p>
-      <button class="btn btn-primary btn-block" [disabled]="nota() === 0" (click)="enviar(v.proprietarioId)">
+      @if (erro()) {
+        <p class="text-muted" style="font-size: 13px;">{{ erro() }}</p>
+      }
+      <button class="btn btn-primary btn-block" [disabled]="nota() === 0 || enviando()" (click)="enviar()">
         Enviar avaliação
       </button>
     }
   `,
 })
-export class AvaliacaoComponent {
+export class AvaliacaoComponent implements OnInit {
   selos = SELOS_SUGERIDOS;
 
   private route = inject(ActivatedRoute);
@@ -73,13 +77,21 @@ export class AvaliacaoComponent {
   texto = signal('');
   selosEscolhidos = signal<string[]>([]);
 
+  erro = signal('');
+  enviando = signal(false);
+  private auth = inject(AuthService);
+
   constructor(
     private booking: BookingService,
     private catalog: CatalogService,
-    private auth: AuthService,
     private router: Router,
     private reviews: ReviewService,
   ) {}
+
+  async ngOnInit(): Promise<void> {
+    const d = await this.booking.carregarDetalhe(this.paramMap().get('id') ?? '');
+    if (d) await this.catalog.carregar(d.reserva.veiculoId);
+  }
 
   alternarSelo(selo: string): void {
     this.selosEscolhidos.update((lista) =>
@@ -87,19 +99,19 @@ export class AvaliacaoComponent {
     );
   }
 
-  enviar(proprietarioId: string): void {
+  /** Quem avalia (locatário ou proprietário) e o alvo são decididos pelo servidor a partir da conta e da reserva. */
+  async enviar(): Promise<void> {
     const r = this.reserva();
-    const nota = this.nota();
-    if (!r || nota === 0) return;
-    this.reviews.enviar({
-      reservaId: r.id,
-      autorId: this.auth.conta().id,
-      autorPapel: this.auth.papelAtivo(),
-      alvoId: this.auth.papelAtivo() === 'locatario' ? proprietarioId : r.locatarioId,
-      nota: nota as 1 | 2 | 3 | 4 | 5,
-      texto: this.texto(),
-      selos: this.selosEscolhidos(),
-    });
-    this.router.navigate(['/locacoes']);
+    if (!r || this.nota() === 0) return;
+    this.erro.set('');
+    this.enviando.set(true);
+    try {
+      await this.reviews.enviar(r.id, { nota: this.nota(), texto: this.texto(), selos: this.selosEscolhidos() });
+      this.router.navigate([this.auth.conta().id === r.locatarioId ? '/locacoes' : '/proprietario/reservas']);
+    } catch (e) {
+      this.erro.set(mensagemErro(e));
+    } finally {
+      this.enviando.set(false);
+    }
   }
 }

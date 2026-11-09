@@ -1,12 +1,10 @@
-import { ChangeDetectionStrategy, Component, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { LucideAngularModule, Clock, CheckCircle2, Car, CheckCheck, XCircle, Search, AlertTriangle } from 'lucide-angular';
 import { BookingService } from '../../core/services/booking.service';
-import { CatalogService } from '../../core/services/catalog.service';
 import { PricingService } from '../../core/services/pricing.service';
-import { DisputeService } from '../../core/services/dispute.service';
-import { AuthService } from '../../core/services/auth.service';
+import { urlImagem } from '../../core/api/api.config';
 import { Reserva, StatusReserva } from '../../core/models/domain.models';
 import { TagComponent, TagVariant } from '../../shared/components/tag.component';
 
@@ -172,24 +170,23 @@ const STATUS_TOM: Record<StatusReserva, { variant: TagVariant; cor: string; fund
     `,
   ],
 })
-export class LocacoesComponent {
+export class LocacoesComponent implements OnInit {
   readonly SearchIcon = Search;
 
   constructor(
     private booking: BookingService,
-    private catalog: CatalogService,
     public pricing: PricingService,
-    private auth: AuthService,
     private router: Router,
-    private dispute: DisputeService,
   ) {}
 
-  private minhas = computed(() =>
-    this.booking.reservas().filter((r) => r.locatarioId === this.auth.conta().id),
-  );
+  ngOnInit(): void {
+    void this.booking.carregar();
+  }
+
+  /** Só as reservas em que sou o locatário (a lista do servidor já vem filtrada). */
+  private minhas = computed(() => this.booking.reservas());
 
   private toCard = (r: Reserva): CardReserva => {
-    const v = this.catalog.porId(r.veiculoId);
     let acaoNome: string | null = null;
     let irParaAcao = () => {};
 
@@ -199,7 +196,7 @@ export class LocacoesComponent {
     } else if (r.status === 'aprovada') {
       acaoNome = 'Pagar e confirmar';
       irParaAcao = () => this.router.navigate(['/locacoes', r.id, 'pagamento']);
-    } else if (r.status === 'em_disputa' && this.dispute.daReserva(r.id)?.status === 'AGUARDANDO_CONTESTACAO') {
+    } else if (r.status === 'em_disputa' && r.disputaStatus === 'AGUARDANDO_CONTESTACAO') {
       acaoNome = 'Ver ocorrência e contestar';
       irParaAcao = () => this.router.navigate(['/locacoes', r.id, 'contestar']);
     } else if (r.status === 'confirmada') {
@@ -215,8 +212,8 @@ export class LocacoesComponent {
 
     return {
       reserva: r,
-      titulo: v?.titulo ?? 'Veículo',
-      foto: v?.foto ?? '',
+      titulo: r.veiculoTitulo,
+      foto: urlImagem(r.veiculoFoto),
       statusFmt: ROTULOS[r.status],
       statusIcon: ICONES[r.status],
       detalhe: DETALHES[r.status],

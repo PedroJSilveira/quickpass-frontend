@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -18,6 +18,7 @@ import {
 } from 'lucide-angular';
 import { PricingService } from '../../core/services/pricing.service';
 import { CatalogService } from '../../core/services/catalog.service';
+import { urlImagem } from '../../core/api/api.config';
 import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
 
 @Component({
@@ -80,14 +81,14 @@ import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
             @for (v of carrosDestaque(); track v.id) {
               <article class="card qp-car-card" (click)="abrir(v.id)">
                 <div class="qp-car-card-photo-wrap">
-                  <div class="qp-photo qp-car-card-photo" [style.background-image]="'url(' + v.foto + ')'"></div>
+                  <div class="qp-photo qp-car-card-photo" [style.background-image]="'url(' + img(v.foto) + ')'"></div>
                 </div>
                 <div class="qp-stack qp-car-card-body">
                   <div class="qp-row-between">
                     <span class="card-title">{{ v.titulo }}</span>
                     <span class="qp-car-card-price">{{ pricing.moneyRounded(v.diaria) }}<small>/dia</small></span>
                   </div>
-                  <div class="card-meta">★ {{ v.nota }} · {{ v.locacoes }} viagens · {{ v.local }}</div>
+                  <div class="card-meta">★ {{ v.nota ?? 'novo' }} · {{ v.locacoes }} viagens · {{ v.local }}</div>
                 </div>
               </article>
             }
@@ -275,7 +276,7 @@ import { formatIsoDate, parseIsoDate } from '../../shared/utils/date.util';
     `,
   ],
 })
-export class SiteComponent {
+export class SiteComponent implements OnInit {
   readonly StarIcon = Star;
 
   public catalog = inject(CatalogService);
@@ -313,13 +314,14 @@ export class SiteComponent {
 
   receitaEstimada = signal(0);
 
-  carrosDestaque = computed(() =>
-    this.catalog
-      .veiculos()
-      .filter((v) => v.status === 'Aprovado')
-      .sort((a, b) => b.locacoes - a.locacoes)
-      .slice(0, 4),
-  );
+  img = urlImagem;
+
+  /** Vitrine: os mais alugados dentre os disponíveis, vindos da API. */
+  carrosDestaque = computed(() => [...this.catalog.resultados()].sort((a, b) => b.locacoes - a.locacoes).slice(0, 4));
+
+  ngOnInit(): void {
+    void this.catalog.pesquisar(false);
+  }
 
   constructor(public pricing: PricingService, private router: Router) {
     this.atualizarSimulacao();

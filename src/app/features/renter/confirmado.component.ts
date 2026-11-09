@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -37,7 +37,6 @@ import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame
 
           <div class="qp-row" style="gap: var(--space-2);">
             <a class="btn btn-secondary" routerLink="/locacoes">Ver minhas locações</a>
-            <a class="btn btn-ghost" routerLink="/proprietario/solicitacoes">Ver o outro lado</a>
           </div>
         }
       </div>
@@ -50,7 +49,7 @@ import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame
     `,
   ],
 })
-export class ConfirmadoComponent {
+export class ConfirmadoComponent implements OnInit {
   private route = inject(ActivatedRoute);
   private paramMap = toSignal(this.route.paramMap, { requireSync: true });
 
@@ -63,4 +62,10 @@ export class ConfirmadoComponent {
   prazoHoras = inject(AppConfigService).get('PRAZO_APROVACAO_RESERVA_HORAS');
 
   constructor(private booking: BookingService, private catalog: CatalogService, public pricing: PricingService) {}
+
+  async ngOnInit(): Promise<void> {
+    await this.booking.carregarDetalhe(this.paramMap().get('id') ?? '');
+    const r = this.reserva();
+    if (r) await this.catalog.carregar(r.veiculoId);
+  }
 }

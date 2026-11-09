@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { BookingService } from '../../core/services/booking.service';
+import { mensagemErro } from '../../core/api/api.service';
 import { TagComponent } from '../../shared/components/tag.component';
 import { BlueprintFrameComponent } from '../../shared/components/blueprint-frame.component';
 import { BackButtonComponent } from '../../shared/components/back-button.component';
@@ -40,9 +41,10 @@ interface ItemKyc {
                 }
               </div>
               <p class="card-body">{{ item.descricao }}</p>
-              <button class="btn btn-secondary" style="align-self: flex-start;" (click)="enviar(item.chave)">
-                {{ auth.conta().kyc[item.chave] ? 'Reenviar' : 'Enviar agora' }}
-              </button>
+              <label class="btn btn-secondary" style="align-self: flex-start; cursor: pointer;" [class.disabled]="enviando() === item.chave">
+                <input type="file" hidden [accept]="item.chave === 'selfie' ? 'image/*' : 'image/*,application/pdf'" [attr.capture]="item.chave === 'selfie' ? 'user' : null" (change)="escolher(item.chave, $event)" />
+                {{ enviando() === item.chave ? 'Enviando…' : auth.conta().kyc[item.chave] ? 'Reenviar arquivo' : 'Enviar arquivo' }}
+              </label>
             </div>
           </qp-blueprint>
         }
@@ -63,7 +65,7 @@ interface ItemKyc {
           }
           @if (auth.contaVerificada()) {
             <button class="btn btn-primary btn-block" (click)="continuar()">
-              {{ reservaId ? 'Continuar minha reserva' : 'Ir para a busca' }}
+              {{ reservaId ? 'Continuar minha reserva' : 'Continuar' }}
             </button>
           }
         </div>
@@ -90,6 +92,7 @@ export class KycComponent {
   /** Reserva retida aguardando o KYC (hold de agenda), quando veio do checkout. */
   reservaId = inject(ActivatedRoute).snapshot.queryParamMap.get('reserva');
   erro = signal('');
+  enviando = signal<keyof Kyc | null>(null);
 
   rotuloStatus = computed(
     () =>
@@ -104,20 +107,33 @@ export class KycComponent {
 
   constructor(public auth: AuthService, private router: Router, private booking: BookingService) {}
 
-  enviar(item: keyof Kyc): void {
-    this.auth.enviarItemKyc(item);
+  /** Envia o arquivo escolhido (multipart); com os 4 itens o servidor conclui a análise. */
+  async escolher(item: keyof Kyc, ev: Event): Promise<void> {
+    const input = ev.target as HTMLInputElement;
+    const arquivo = input.files?.[0];
+    input.value = '';
+    if (!arquivo || item === 'aprovado') return;
+    this.erro.set('');
+    this.enviando.set(item);
+    try {
+      await this.auth.enviarItemKyc(item, arquivo);
+    } catch (e) {
+      this.erro.set(mensagemErro(e));
+    } finally {
+      this.enviando.set(null);
+    }
   }
 
-  continuar(): void {
+  async continuar(): Promise<void> {
     if (this.reservaId) {
       try {
-        this.booking.continuarAposKyc(this.reservaId);
+        await this.booking.continuarAposKyc(this.reservaId);
         this.router.navigate(['/reserva', this.reservaId, 'confirmado']);
       } catch (e) {
-        this.erro.set((e as Error).message);
+        this.erro.set(mensagemErro(e));
       }
       return;
     }
-    this.router.navigate(['/buscar']);
+    this.router.navigate([this.auth.rotaInicial()]);
   }
 }
