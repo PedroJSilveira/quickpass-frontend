@@ -332,7 +332,7 @@ export interface Payment {
   pagoEm: string | null;
 }
 
-export type TipoNotificacao = 'revisao_agenda' | 'demanda_local' | 'radar' | 'avaria_informada';
+export type TipoNotificacao = 'revisao_agenda' | 'demanda_local' | 'radar' | 'avaria_informada' | 'solicitacao_recebida' | 'reserva_aprovada' | 'reserva_rejeitada';
 
 /** Notificação enviada, com o dado que a justificou (RNF03). */
 export interface Notificacao {
